@@ -64,6 +64,8 @@ int main(int argc, char** argv)
 	auto buf_labels = labels_gmem.data();
 	auto buf_encHV = encHV_gmem.data();
 	auto buf_trainScore = trainScore.data();
+	cout << "Training with " << N_SAMPLE << " samples." << endl;
+
 	t_start = chrono::high_resolution_clock::now();
 	hd(buf_input,
 	   buf_ID,
@@ -79,9 +81,9 @@ int main(int argc, char** argv)
 	cout << "Reading train data took " << mSec_train << " mSec" << endl;
 	cout << "Train execution took " << mSec << " mSec" << endl;
 	
-	for(int i = 0; i < N_CLASS; i++){
-		//cout << classHV_gmem[i*Dhv] << "\t" << classHV_gmem[i*Dhv + Dhv - 1] << endl;
-	}
+	/*for(int i = 0; i < N_CLASS; i++){
+		cout << classHV_gmem[i*Dhv] << "\t" << classHV_gmem[i*Dhv + Dhv - 1] << endl;
+	}*/
 	cout << "Train accuracy = " << float(trainScore[0])/N_SAMPLE << endl << endl;
 	
 	t_start = chrono::high_resolution_clock::now();

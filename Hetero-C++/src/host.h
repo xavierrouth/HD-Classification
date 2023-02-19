@@ -32,9 +32,9 @@ int train = 3;
 
 #define N_CLASS		26	//number of classes. (e.g., isolet: 26, ucihar 12)
 #define Dhv				2048  //hypervectors length
-std::string X_train_path = "./isolet_trainX.bin";
-std::string y_train_path = "./isolet_trainY.bin";
-std::string X_test_path = "./isolet_testX.bin";
-std::string y_test_path = "./isolet_testY.bin";
+std::string X_train_path = "../dataset/isolet_train_trainX.bin";
+std::string y_train_path = "../dataset/isolet_train_trainY.bin";
+std::string X_test_path = "../dataset/isolet_test_testX.bin";
+std::string y_test_path = "../dataset/isolet_test_testY.bin";
 
 

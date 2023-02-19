@@ -7,14 +7,11 @@
  * feature_stream (output): N_FEAT_PAD parallel streams to stream the data to the next module.
  * size (input): number of data sampels.
  */
-
-
-
 void inputStream(int *input_gmem, FIFO<int> feature_stream[N_FEAT_PAD], int size){
 
 	loop_inputs:
 	for(int iter_read = 0; iter_read < size; iter_read++){
-		#pragma HLS LOOP_TRIPCOUNT MIN=1000 MAX=1000
+		//#pragma HLS LOOP_TRIPCOUNT MIN=1000 MAX=1000
 		 //Need to move the pointer by intPerInput after each input
 		int offset = iter_read * N_FEAT;
 		loop_features:
@@ -45,11 +42,11 @@ void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], FIFO
 
 	//Operate on ROW encoding dimension per cycle
 	int encHV_partial[ROW];
-	#pragma HLS array_partition variable=encHV_partial
+	//#pragma HLS array_partition variable=encHV_partial
 
 	int feature_array[N_FEAT_PAD];
 	//Factor the feature memory into COL, as we read COL elements of it in parallel.
-	#pragma HLS array_partition variable=feature_array cyclic factor=COL
+	//#pragma HLS array_partition variable=feature_array cyclic factor=COL
 
 	//ID register to keep ROW+COL bits for a ROW*COL window.
 	//ID memory has ROW bits per cell, so we use 2*ROW bit register (extra bits will be used in the next window).
@@ -58,11 +55,11 @@ void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], FIFO
 
 	loop_inputs:
 	for(int iter_read = 0; iter_read < size; iter_read++){
-		#pragma HLS LOOP_TRIPCOUNT MIN=1000 MAX=1000
+		//#pragma HLS LOOP_TRIPCOUNT MIN=1000 MAX=1000
 		//Read all features into the feature_array.
 		loop_stream:
 		for(int i = 0; i < N_FEAT_PAD; i++){
-			#pragma HLS UNROLL factor=COL
+			//#pragma HLS UNROLL factor=COL
 			feature_stream[i] >> feature_array[i];
 		}
 
@@ -73,7 +70,7 @@ void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], FIFO
 			//Clear the partial encoding buffer when the window starts the new rows.
 			loop_clear:
 			for(int i = 0; i < ROW; i++){
-				#pragma HLS UNROLL factor=ROW
+				//#pragma HLS UNROLL factor=ROW
 				encHV_partial[i] = 0;
 			}
 			//We need to figure out which ID bits should be read.
@@ -89,17 +86,17 @@ void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], FIFO
 			//Divide each of row blocks into columns (tiles) of COL, i.e., multiply a ROW*COL tile to COL features at a given cycle.
 			loop_mat_col:
 			for(int c = 0; c < N_FEAT_PAD/COL; c++){
-				#pragma HLS PIPELINE
+				//#pragma HLS PIPELINE
 
 				//Iterate over the rows and columns of the ROW*COL tile to perform matrix-vector multplication.
 				loop_tile_row:
 				for(int i = 0; i < ROW; i++){
-					#pragma HLS UNROLL factor=ROW
+					//#pragma HLS UNROLL factor=ROW
 					//In each ID register of 2*ROW bits, bits [0-COL) are for the first row, [1, COL+1) for the second, and so on.
 					uint8_t ID_row = (ID_reg >> i) & 0xFF;
 					loop_tile_col:
 					for(int j = 0; j < COL; j++){
-						#pragma HLS UNROLL factor=COL
+						//#pragma HLS UNROLL factor=COL
 						//For column group c, we read features c*COL to (c+1)*COL.
 						int feature = feature_array[c*COL + j];
 						if(ID_row & (1 << j))
@@ -133,7 +130,7 @@ void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], FIFO
 			//Note that we use quantized random projection. Otherwise, we will need higher bit-width for classes (and tmp resgiter during dot-product).
 			loop_enc_stream:
 			for(int i = 0; i < ROW; i++){
-				#pragma HLS UNROLL factor=ROW
+				//#pragma HLS UNROLL factor=ROW
 				if(encHV_partial[i] >= 0)
 					enc_stream[i] << 1;
 				else
@@ -158,16 +155,15 @@ void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], FIFO
  * train (input): number of training epochs (0 = inference)
  * size (input): number of data samples.
  */
-
 void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size){
 
 	//Explained previously: to operate on ROW encoding dimensions per cycle.
 	int encHV_partial[ROW];
-	#pragma HLS array_partition variable=encHV_partial
+	//#pragma HLS array_partition variable=encHV_partial
 
 	//To store the dot-product of the classes with the encoding hypervector.
 	int dotProductRes[N_CLASS];
-	#pragma HLS array_partition variable=dotProductRes
+	//#pragma HLS array_partition variable=dotProductRes
 
 	//For cosine, we need to store 1/|C|_2, which are small fractional numbers. For now we use float, though we may change to ap_fixed.
 	float norm2_inv[N_CLASS];
@@ -176,19 +172,19 @@ void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, 
 	//I tried replacing encHV_full with a 1-d array (i.e., dt_int2 encHV_full[Dhv] with cyclic partitioning) but latency of search increased 50%.
 	//As a result of using 2-d array, there will be some annoying temp variables to read/write data from/to encHV_full within the code.
 	uint32_t encHV_full[Dhv/ROW];
-	#pragma HLS array_partition variable=encHV_full
+	//#pragma HLS array_partition variable=encHV_full
 
 	int EPOCH = (train == 0) ? 1 : train;
 
 	int classHV[N_CLASS][Dhv];
 	//We partition each class dimensions into ROW elements to match the ROW generated dimensions.
-	#pragma HLS array_partition variable=classHV cyclic factor=ROW dim=2
+	//#pragma HLS array_partition variable=classHV cyclic factor=ROW dim=2
 
 	//Initialize the class hypervectors.
 	loop_initClass:
 	for(int i = 0; i < N_CLASS; i++){
 		for(int dim = 0; dim < Dhv; dim++){
-			#pragma HLS PIPELINE
+			//#pragma HLS PIPELINE
 			//For inference, class hypervectors are given.
 			if(train == 0)
 				classHV[i][dim] = classHV_gmem[i*Dhv + dim];
@@ -202,7 +198,7 @@ void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, 
 
 	loop_repeat:
 	for(int iter_epoch = 0; iter_epoch < EPOCH; iter_epoch++){
-		#pragma HLS LOOP_TRIPCOUNT MIN=1 MAX=1
+		//#pragma HLS LOOP_TRIPCOUNT MIN=1 MAX=1
 
 		//Count the number of correct prediction in training epochs.
 		correct = 0;
@@ -213,7 +209,7 @@ void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, 
 			uint64_t total = 0;
 			loop_norm_2:
 			for(int dim = 0; dim < Dhv; dim++){
-				#pragma HLS UNROLL factor=ROW
+				//#pragma HLS UNROLL factor=ROW
 				total += classHV[i_class][dim] * classHV[i_class][dim];
 			}
 			//Total might be 0 before the first round of training, or if some class didn't have any sample,
@@ -231,7 +227,7 @@ void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, 
 
 		loop_inputs:
 		for(int iter_read = 0; iter_read < size; iter_read++){
-			#pragma HLS LOOP_TRIPCOUNT MIN=1000 MAX=1000
+			//#pragma HLS LOOP_TRIPCOUNT MIN=1000 MAX=1000
 
 			//For inference we do not need to read the label.
 			if(train > 0)
@@ -240,17 +236,17 @@ void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, 
 			//Reset the dotProductRes (score buffer) before each input sample.
 			loop_clear:
 			for(int i_class = 0; i_class < N_CLASS; i_class++){
-				#pragma HLS UNROLL
+				//#pragma HLS UNROLL
 				dotProductRes[i_class] = 0;
 			}
 			//In the subsequent training epochs (i.e., retraining), we just reuse the encoding hypervectors generated in the first epoch.
 			if(iter_epoch > 0){
 				loop_read_encHV:
 				for(int i = 0; i < Dhv/512; i++){
-					//#pragma HLS PIPELINE
+					////#pragma HLS PIPELINE
 					HyperVector512 enc_512b = encHV_gmem[iter_read*(Dhv/512) + i];
 					for(int j = 0; j < 512/ROW; j += 1){
-						#pragma HLS UNROLL
+						//#pragma HLS UNROLL
 						//encHV_full[(i*512/ROW) + j] = enc_512b.range(j*ROW+ROW-1, j*ROW);
 						encHV_full[(i*512/ROW) + j] = enc_512b.buf[j];
 					}
@@ -263,7 +259,7 @@ void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, 
 				uint32_t temp_partial = encHV_full[i_dim];
 				loop_stream:
 				for(int j_sub = 0; j_sub < ROW; j_sub++){
-					#pragma HLS UNROLL factor=ROW
+					//#pragma HLS UNROLL factor=ROW
 					if(iter_epoch == 0){
 						enc_stream[j_sub] >> encHV_partial[j_sub];
 					}
@@ -276,7 +272,7 @@ void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, 
 					uint32_t temp_partial;
 					loop_init:
 					for(int j_sub = 0; j_sub < ROW; j_sub++){
-						#pragma HLS UNROLL factor=ROW
+						//#pragma HLS UNROLL factor=ROW
 						classHV[label][i_dim*ROW + j_sub] += encHV_partial[j_sub];
 						//store the dimensions (in a whole hypervector) and save to global memory for reuse in next epochs.
 						//temp_partial[j_sub] = encHV_partial[j_sub] == 1 ? 1 : 0; //Bipolar to binary conversion.
@@ -293,11 +289,11 @@ void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, 
 					//Multiply the generated ROW encoding dimensions to the corresponding class hypervectors.
 					loop_score:
 					for(int j_class = 0; j_class < N_CLASS; j_class++){
-						//#pragma HLS PIPELINE
-						#pragma HLS UNROLL
+						////#pragma HLS PIPELINE
+						//#pragma HLS UNROLL
 						loop_inner:
 						for(int k_sub = 0; k_sub < ROW; k_sub++){
-							#pragma HLS UNROLL factor=ROW
+							//#pragma HLS UNROLL factor=ROW
 							//i_dim keeps track of the global index of classes (increases by ROW after processing a block of ROW rows).
 							dotProductRes[j_class] += encHV_partial[k_sub] * classHV[j_class][i_dim*ROW + k_sub];
 						}
@@ -331,7 +327,7 @@ void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, 
 					for(int i_sub = 0; i_sub < Dhv/ROW; i_sub++){
 						uint32_t temp_partial = encHV_full[i_sub];
 						for(int j = 0; j < ROW; j++){
-							#pragma HLS UNROLL
+							//#pragma HLS UNROLL
 							//int temp_dim = temp_partial[j] == 1 ? 1 : -1;
 							int temp_dim = temp_partial & (1 << j) ? 1 : -1;
 							classHV[label][i_sub*ROW + j] += temp_dim;
@@ -349,7 +345,7 @@ void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, 
 				for(int i = 0; i < Dhv/512; i++){
 					HyperVector512 enc_512b;
 					for(int j = 0; j < 512/ROW; j += 1){
-						#pragma HLS UNROLL
+						//#pragma HLS UNROLL
 						//enc_512b.range(j*ROW+ROW-1, j*ROW) = encHV_full[(i*512/ROW) + j];
 						enc_512b.buf[j] = encHV_full[(i*512/ROW) + j];
 					}
@@ -367,7 +363,7 @@ void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, 
 		loop_writeClasses:
 		for(int i = 0; i < N_CLASS; i++){
 			for(int j = 0; j < Dhv; j++){
-				#pragma HLS PIPELINE
+				//#pragma HLS PIPELINE
 				classHV_gmem[i*Dhv + j] = classHV[i][j];
 			}
 		}
@@ -378,16 +374,16 @@ void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, 
 
 void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size){
 
-	static FIFO<int> feature_stream[N_FEAT_PAD];
-	#pragma HLS STREAM variable=feature_stream depth=2
+	FIFO<int> *feature_stream = new FIFO<int>[N_FEAT_PAD];
+	//#pragma HLS STREAM variable=feature_stream depth=2
 
 	//For now, the encoding stream is integer while we are using bipolar (+1, -1) encoding. Fix it later.
-	static FIFO<int> enc_stream[ROW];
-	#pragma HLS STREAM variable=enc_stream depth=2
+	FIFO<int> *enc_stream = new FIFO<int>[ROW];
+	//#pragma HLS STREAM variable=enc_stream depth=2
 
 	//We have a seed ID of Dhv length, and we partition it to Dhv/ROW pieces of ROW bits as we operate on ROW rows at the same time.
 	uint32_t ID[Dhv/ROW];
-	#pragma HLS array_partition variable=ID cyclic factor=4
+	//#pragma HLS array_partition variable=ID cyclic factor=4
 
 	//Initialize the seed ID hypervector.
 	int offset = 0;
@@ -412,7 +408,7 @@ void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, Hyp
 		*/
 	}
 
-	#pragma HLS dataflow
+	//#pragma HLS dataflow
 	inputStream(input_gmem, feature_stream, size);
 	encodeUnit(feature_stream, ID, enc_stream, size);
 	searchUnit(enc_stream, classHV_gmem, labels_gmem, encHV_gmem, trainScore, train, size);
@@ -429,25 +425,24 @@ void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, Hyp
  * train (input): number of training epochs (0 = inference)
  * size (input): number of data samples.
  */
-
 void hd(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size){
 
-	#pragma HLS INTERFACE m_axi port=input_gmem   offset=slave bundle=gmem0
-	#pragma HLS INTERFACE m_axi port=ID_gmem      offset=slave bundle=gmem1
-	#pragma HLS INTERFACE m_axi port=classHV_gmem offset=slave bundle=gmem2
-	#pragma HLS INTERFACE m_axi port=labels_gmem  offset=slave bundle=gmem2
-	#pragma HLS INTERFACE m_axi port=encHV_gmem   offset=slave bundle=gmem3
-	#pragma HLS INTERFACE m_axi port=trainScore   offset=slave bundle=gmem2
+	//#pragma HLS INTERFACE m_axi port=input_gmem   offset=slave bundle=gmem0
+	//#pragma HLS INTERFACE m_axi port=ID_gmem      offset=slave bundle=gmem1
+	//#pragma HLS INTERFACE m_axi port=classHV_gmem offset=slave bundle=gmem2
+	//#pragma HLS INTERFACE m_axi port=labels_gmem  offset=slave bundle=gmem2
+	//#pragma HLS INTERFACE m_axi port=encHV_gmem   offset=slave bundle=gmem3
+	//#pragma HLS INTERFACE m_axi port=trainScore   offset=slave bundle=gmem2
 
-	#pragma HLS INTERFACE s_axilite port=input_gmem   bundle=control
-	#pragma HLS INTERFACE s_axilite port=ID_gmem      bundle=control
-	#pragma HLS INTERFACE s_axilite port=classHV_gmem bundle=control
-	#pragma HLS INTERFACE s_axilite port=labels_gmem  bundle=control
-	#pragma HLS INTERFACE s_axilite port=encHV_gmem   bundle=control
-	#pragma HLS INTERFACE s_axilite port=trainScore   bundle=control
-	#pragma HLS INTERFACE s_axilite port=train        bundle=control
-	#pragma HLS INTERFACE s_axilite port=size         bundle=control
-	#pragma HLS INTERFACE s_axilite port=return       bundle=control
+	//#pragma HLS INTERFACE s_axilite port=input_gmem   bundle=control
+	//#pragma HLS INTERFACE s_axilite port=ID_gmem      bundle=control
+	//#pragma HLS INTERFACE s_axilite port=classHV_gmem bundle=control
+	//#pragma HLS INTERFACE s_axilite port=labels_gmem  bundle=control
+	//#pragma HLS INTERFACE s_axilite port=encHV_gmem   bundle=control
+	//#pragma HLS INTERFACE s_axilite port=trainScore   bundle=control
+	//#pragma HLS INTERFACE s_axilite port=train        bundle=control
+	//#pragma HLS INTERFACE s_axilite port=size         bundle=control
+	//#pragma HLS INTERFACE s_axilite port=return       bundle=control
 
 	top(input_gmem, ID_gmem, classHV_gmem, labels_gmem, encHV_gmem, trainScore, train, size);
 

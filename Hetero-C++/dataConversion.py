@@ -108,3 +108,6 @@ def convert_bin(format_, X_train_path='', y_train_path='', X_test_path='', y_tes
 	np.array(y_train_1d).astype('int32').tofile(y_train_out)
 	np.array(X_test_1d).astype('int32').tofile(X_test_out)
 	np.array(y_test_1d).astype('int32').tofile(y_test_out)
+
+print("I am assuming that you've used 7z to unpack the choir dat files into isolet_train.choir and isolet_test.choir in ../dataset/.")
+convert_bin("choir", "../dataset/isolet_train.choir", "", "../dataset/isolet_test.choir", "");

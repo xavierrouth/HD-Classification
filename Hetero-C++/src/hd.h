@@ -21,7 +21,7 @@ using namespace std;
 
 #define N_FEAT_PAD		(N_FEAT + PAD)	//feature per input (e.g., isolet: 624, ucihar 568)
 
-template <typename T, std::size_t size = 4096>
+template <typename T, std::size_t size = 1000000>
 struct FIFO {
         std::size_t head = 0, tail = 0;
         std::size_t len;
@@ -41,6 +41,12 @@ struct FIFO {
                 tail = (tail + 1) % size;
                 return t;
         }
+
+	void clear() {
+		len = 0;
+		head = 0;
+		tail = 0;
+	}
 
 	friend FIFO<T, size> &operator<<(FIFO<T, size> &fifo, const T &t) {
 		fifo.push(t);

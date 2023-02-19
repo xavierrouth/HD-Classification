@@ -10,7 +10,7 @@ LFLAGS :=
 all: $(HOST_EXE)
 
 clean:
-	rm -f $(HOST_EXE) *.o
+	rm -f $(HOST_EXE) build/*.o
 
 $(HOST_EXE): build/host.o build/hd.o
 	g++ $(CFLAGS) -o $@ $^ $(LFLAGS)
