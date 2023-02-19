@@ -160,10 +160,10 @@ void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], FIFO
  * size (input): number of data samples.
  */
 
-void searchUnit(FIFO<ap_int<2>> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, ap_int<512> *encHV_gmem, int *trainScore, int train, int size){
+void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size){
 
 	//Explained previously: to operate on ROW encoding dimensions per cycle.
-	ap_int<2> encHV_partial[ROW];
+	int encHV_partial[ROW];
 	#pragma HLS array_partition variable=encHV_partial
 
 	//To store the dot-product of the classes with the encoding hypervector.
@@ -176,7 +176,7 @@ void searchUnit(FIFO<ap_int<2>> enc_stream[ROW], int *classHV_gmem, int *labels_
 	//During retraining, we will need the encoded hypervector from global memory (as we generated and stored them in the first epoch).
 	//I tried replacing encHV_full with a 1-d array (i.e., dt_int2 encHV_full[Dhv] with cyclic partitioning) but latency of search increased 50%.
 	//As a result of using 2-d array, there will be some annoying temp variables to read/write data from/to encHV_full within the code.
-	ap_int<ROW> encHV_full[Dhv/ROW];
+	uint32_t encHV_full[Dhv/ROW];
 	#pragma HLS array_partition variable=encHV_full
 
 	int EPOCH = (train == 0) ? 1 : train;
@@ -211,7 +211,7 @@ void searchUnit(FIFO<ap_int<2>> enc_stream[ROW], int *classHV_gmem, int *labels_
 		//At the beginning of each epoch, calculate 1/|C|_2 (we call "1/|C|_2" as norm2).
 		loop_norm_1:
 		for(int i_class = 0; i_class < N_CLASS; i_class++){
-			ap_int<64> total = 0;
+			uint64_t total = 0;
 			loop_norm_2:
 			for(int dim = 0; dim < Dhv; dim++){
 				#pragma HLS UNROLL factor=ROW
@@ -249,10 +249,11 @@ void searchUnit(FIFO<ap_int<2>> enc_stream[ROW], int *classHV_gmem, int *labels_
 				loop_read_encHV:
 				for(int i = 0; i < Dhv/512; i++){
 					//#pragma HLS PIPELINE
-					ap_int<512> enc_512b = encHV_gmem[iter_read*(Dhv/512) + i];
+					HyperVector512 enc_512b = encHV_gmem[iter_read*(Dhv/512) + i];
 					for(int j = 0; j < 512/ROW; j += 1){
 						#pragma HLS UNROLL
-						encHV_full[(i*512/ROW) + j] = enc_512b.range(j*ROW+ROW-1, j*ROW);
+						//encHV_full[(i*512/ROW) + j] = enc_512b.range(j*ROW+ROW-1, j*ROW);
+						encHV_full[(i*512/ROW) + j] = enc_512b.buf[j];
 					}
 				}
 			}
@@ -260,7 +261,7 @@ void searchUnit(FIFO<ap_int<2>> enc_stream[ROW], int *classHV_gmem, int *labels_
 			//i_dim keeps track of the global index of classes (increases by ROW after processing a block of ROW rows).
 			loop_outer:
 			for(int i_dim = 0; i_dim < Dhv/ROW; i_dim += 1){
-				ap_int<ROW> temp_partial = encHV_full[i_dim];
+				uint32_t temp_partial = encHV_full[i_dim];
 				loop_stream:
 				for(int j_sub = 0; j_sub < ROW; j_sub++){
 					#pragma HLS UNROLL factor=ROW
@@ -268,18 +269,23 @@ void searchUnit(FIFO<ap_int<2>> enc_stream[ROW], int *classHV_gmem, int *labels_
 						enc_stream[j_sub] >> encHV_partial[j_sub];
 					}
 					else{
-						encHV_partial[j_sub] = temp_partial[j_sub] == 1 ? 1 : -1; //Binary to bipolar conversion.
+						encHV_partial[j_sub] = temp_partial & (1 << j_sub) ? 1 : -1; //Binary to bipolar conversion.
 					}
 				}
-				 //In the first epoch of TRAINING, initialize the classes, and store the encoded hypervector.
+				//In the first epoch of TRAINING, initialize the classes, and store the encoded hypervector.
 				if(iter_epoch == 0 && train > 0){
-					ap_int<ROW> temp_partial;
+					uint32_t temp_partial;
 					loop_init:
 					for(int j_sub = 0; j_sub < ROW; j_sub++){
 						#pragma HLS UNROLL factor=ROW
 						classHV[label][i_dim*ROW + j_sub] += encHV_partial[j_sub];
 						//store the dimensions (in a whole hypervector) and save to global memory for reuse in next epochs.
-						temp_partial[j_sub] = encHV_partial[j_sub] == 1 ? 1 : 0; //Bipolar to binary conversion.
+						//temp_partial[j_sub] = encHV_partial[j_sub] == 1 ? 1 : 0; //Bipolar to binary conversion.
+						if (encHV_partial[j_sub] == 1) {
+							temp_partial |= 1 << j_sub;
+						} else {
+							temp_partial &= ~(1 << j_sub);
+						}
 					}
 					encHV_full[i_dim] = temp_partial;
 				}
@@ -324,10 +330,11 @@ void searchUnit(FIFO<ap_int<2>> enc_stream[ROW], int *classHV_gmem, int *labels_
 				if(maxIndex != label){
 					loop_update:
 					for(int i_sub = 0; i_sub < Dhv/ROW; i_sub++){
-						ap_int<ROW> temp_partial = encHV_full[i_sub];
+						uint32_t temp_partial = encHV_full[i_sub];
 						for(int j = 0; j < ROW; j++){
 							#pragma HLS UNROLL
-							ap_int<2> temp_dim = temp_partial[j] == 1 ? 1 : -1;
+							//int temp_dim = temp_partial[j] == 1 ? 1 : -1;
+							int temp_dim = temp_partial & (1 << j) ? 1 : -1;
 							classHV[label][i_sub*ROW + j] += temp_dim;
 							classHV[maxIndex][i_sub*ROW + j] -= temp_dim;
 						}
@@ -341,10 +348,11 @@ void searchUnit(FIFO<ap_int<2>> enc_stream[ROW], int *classHV_gmem, int *labels_
 			if(train > 0 && iter_epoch == 0){
 				loop_writeEncHV:
 				for(int i = 0; i < Dhv/512; i++){
-					ap_int<512> enc_512b;
+					HyperVector512 enc_512b;
 					for(int j = 0; j < 512/ROW; j += 1){
 						#pragma HLS UNROLL
-						enc_512b.range(j*ROW+ROW-1, j*ROW) = encHV_full[(i*512/ROW) + j];
+						//enc_512b.range(j*ROW+ROW-1, j*ROW) = encHV_full[(i*512/ROW) + j];
+						enc_512b.buf[j] = encHV_full[(i*512/ROW) + j];
 					}
 					encHV_gmem[iter_read*(Dhv/512) + i] = enc_512b;
 				}

@@ -52,3 +52,7 @@ struct FIFO {
 		return fifo;
 	}
 };
+
+struct HyperVector512 {
+	uint32_t buf[512 / 32];
+};
