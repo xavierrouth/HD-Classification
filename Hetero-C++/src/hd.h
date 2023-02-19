@@ -1,7 +1,6 @@
-
 #include <iostream>
-#include <hls_stream.h>
-#include <ap_int.h>
+#include <assert.h>
+#include <cstdlib>
 
 using namespace std;
 
@@ -9,6 +8,7 @@ using namespace std;
 #define N_CLASS			26	//number of classes. (e.g., isolet: 26, ucihar 12)
 #define Dhv				2048 //hypervectors length
 #define COL				8 //number of columns of a matrix-vector multiplication window (keep fixed 8)
+// NOTE: For current Hetero-C++ implementation, ROW ***must*** be kept as 32. The original FPGA code uses ROW as the length of many ap_ints, which is not "standard" C++.
 #define ROW				32 //number of rows of a matrix-vector multiplication window (32, 64, 128, 256, 512)
 
 
@@ -21,5 +21,40 @@ using namespace std;
 
 #define N_FEAT_PAD		(N_FEAT + PAD)	//feature per input (e.g., isolet: 624, ucihar 568)
 
-typedef ap_int<2> dt_int2;
+template <typename T, std::size_t size = 4096>
+struct FIFO {
+        std::size_t head = 0, tail = 0;
+        std::size_t len;
+        T buf[size] = {0};
 
+        void push(T t) {
+                assert(len < size);
+                ++len;
+                buf[head] = t;
+                head = (head + 1) % size;
+        }
+
+        T pop() {
+                assert(len > 0);
+                --len;
+                T t = buf[tail];
+                tail = (tail + 1) % size;
+                return t;
+        }
+
+	friend FIFO<T, size> &operator<<(FIFO<T, size> &fifo, const T &t) {
+		fifo.push(t);
+		return fifo;
+	}
+
+	friend FIFO<T, size> &operator>>(FIFO<T, size> &fifo, T &t) {
+		t = fifo.pop();
+		return fifo;
+	}
+};
+
+struct HyperVector512 {
+	uint32_t buf[512 / 32];
+};
+
+void hd(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size);

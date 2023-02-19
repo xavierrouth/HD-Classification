@@ -1,4 +1,3 @@
-
 #include "hd.h"
 
 /*
@@ -11,7 +10,7 @@
 
 
 
-void inputStream(int *input_gmem, hls::stream<int> feature_stream[N_FEAT_PAD], int size){
+void inputStream(int *input_gmem, FIFO<int> feature_stream[N_FEAT_PAD], int size){
 
 	loop_inputs:
 	for(int iter_read = 0; iter_read < size; iter_read++){
@@ -42,8 +41,7 @@ void inputStream(int *input_gmem, hls::stream<int> feature_stream[N_FEAT_PAD], i
  * size (input): number of data samples.
  *
  */
-template<int ROW_, int COL_>
-void encodeUnit(hls::stream<int> feature_stream[N_FEAT_PAD], ap_int<ROW> ID[Dhv/ROW], hls::stream<dt_int2> enc_stream[ROW], int size){
+void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], FIFO<int> enc_stream[ROW], int size){
 
 	//Operate on ROW encoding dimension per cycle
 	int encHV_partial[ROW];
@@ -51,12 +49,12 @@ void encodeUnit(hls::stream<int> feature_stream[N_FEAT_PAD], ap_int<ROW> ID[Dhv/
 
 	int feature_array[N_FEAT_PAD];
 	//Factor the feature memory into COL, as we read COL elements of it in parallel.
-	#pragma HLS array_partition variable=feature_array cyclic factor=COL_
+	#pragma HLS array_partition variable=feature_array cyclic factor=COL
 
 	//ID register to keep ROW+COL bits for a ROW*COL window.
 	//ID memory has ROW bits per cell, so we use 2*ROW bit register (extra bits will be used in the next window).
 	//It might look a little tricky. See the report for visualization.
-	ap_int<2*ROW> ID_reg;
+	uint64_t ID_reg;
 
 	loop_inputs:
 	for(int iter_read = 0; iter_read < size; iter_read++){
@@ -64,7 +62,7 @@ void encodeUnit(hls::stream<int> feature_stream[N_FEAT_PAD], ap_int<ROW> ID[Dhv/
 		//Read all features into the feature_array.
 		loop_stream:
 		for(int i = 0; i < N_FEAT_PAD; i++){
-			#pragma HLS UNROLL factor=COL_
+			#pragma HLS UNROLL factor=COL
 			feature_stream[i] >> feature_array[i];
 		}
 
@@ -75,7 +73,7 @@ void encodeUnit(hls::stream<int> feature_stream[N_FEAT_PAD], ap_int<ROW> ID[Dhv/
 			//Clear the partial encoding buffer when the window starts the new rows.
 			loop_clear:
 			for(int i = 0; i < ROW; i++){
-				#pragma HLS UNROLL factor=ROW_
+				#pragma HLS UNROLL factor=ROW
 				encHV_partial[i] = 0;
 			}
 			//We need to figure out which ID bits should be read.
@@ -86,8 +84,7 @@ void encodeUnit(hls::stream<int> feature_stream[N_FEAT_PAD], ap_int<ROW> ID[Dhv/
 			//In the last block, r+1 becomes Dhv/ROW, so we start from 0 (ID bits are stored circular).
 			if(addr2 == Dhv/ROW)
 				addr2 = 0;
-			ID_reg.range(ROW-1, 0) = ID[addr1];
-			ID_reg.range(2*ROW-1, ROW) = ID[addr2];
+			ID_reg = (((uint64_t) ID[addr2]) << 32) | ((uint64_t) ID[addr1]);
 
 			//Divide each of row blocks into columns (tiles) of COL, i.e., multiply a ROW*COL tile to COL features at a given cycle.
 			loop_mat_col:
@@ -97,15 +94,15 @@ void encodeUnit(hls::stream<int> feature_stream[N_FEAT_PAD], ap_int<ROW> ID[Dhv/
 				//Iterate over the rows and columns of the ROW*COL tile to perform matrix-vector multplication.
 				loop_tile_row:
 				for(int i = 0; i < ROW; i++){
-					#pragma HLS UNROLL factor=ROW_
+					#pragma HLS UNROLL factor=ROW
 					//In each ID register of 2*ROW bits, bits [0-COL) are for the first row, [1, COL+1) for the second, and so on.
-					ap_int<COL> ID_row = ID_reg.range(i+COL-1, i);
+					uint8_t ID_row = (ID_reg >> i) & 0xFF;
 					loop_tile_col:
 					for(int j = 0; j < COL; j++){
-						#pragma HLS UNROLL factor=COL_
+						#pragma HLS UNROLL factor=COL
 						//For column group c, we read features c*COL to (c+1)*COL.
 						int feature = feature_array[c*COL + j];
-						if(ID_row[j] == 1)
+						if(ID_row & (1 << j))
 							encHV_partial[i] += feature;
 						else
 							encHV_partial[i] -= feature;
@@ -123,8 +120,7 @@ void encodeUnit(hls::stream<int> feature_stream[N_FEAT_PAD], ap_int<ROW> ID[Dhv/
 						addr1 = 0;
 					if(addr2 == Dhv/ROW)
 						addr2 = 0;
-					ID_reg.range(ROW-1, 0) = ID[addr1];
-					ID_reg.range(2*ROW-1, ROW) = ID[addr2];
+					ID_reg = (((uint64_t) ID[addr2]) << 32) | ((uint64_t) ID[addr1]);
 				}
 				//We have not reached the bound of ROW/COL, so the ID register contains the needed bits.
 				//Just shift right by COL, so 'ID_reg.range(i+COL-1, i)' gives the correct ID bits per each row i of the ID block.
@@ -137,7 +133,7 @@ void encodeUnit(hls::stream<int> feature_stream[N_FEAT_PAD], ap_int<ROW> ID[Dhv/
 			//Note that we use quantized random projection. Otherwise, we will need higher bit-width for classes (and tmp resgiter during dot-product).
 			loop_enc_stream:
 			for(int i = 0; i < ROW; i++){
-				#pragma HLS UNROLL factor=ROW_
+				#pragma HLS UNROLL factor=ROW
 				if(encHV_partial[i] >= 0)
 					enc_stream[i] << 1;
 				else
@@ -163,11 +159,10 @@ void encodeUnit(hls::stream<int> feature_stream[N_FEAT_PAD], ap_int<ROW> ID[Dhv/
  * size (input): number of data samples.
  */
 
-template<int ROW_>
-void searchUnit(hls::stream<dt_int2> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, ap_int<512> *encHV_gmem, int *trainScore, int train, int size){
+void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size){
 
 	//Explained previously: to operate on ROW encoding dimensions per cycle.
-	dt_int2 encHV_partial[ROW];
+	int encHV_partial[ROW];
 	#pragma HLS array_partition variable=encHV_partial
 
 	//To store the dot-product of the classes with the encoding hypervector.
@@ -180,14 +175,14 @@ void searchUnit(hls::stream<dt_int2> enc_stream[ROW], int *classHV_gmem, int *la
 	//During retraining, we will need the encoded hypervector from global memory (as we generated and stored them in the first epoch).
 	//I tried replacing encHV_full with a 1-d array (i.e., dt_int2 encHV_full[Dhv] with cyclic partitioning) but latency of search increased 50%.
 	//As a result of using 2-d array, there will be some annoying temp variables to read/write data from/to encHV_full within the code.
-	ap_int<ROW> encHV_full[Dhv/ROW];
+	uint32_t encHV_full[Dhv/ROW];
 	#pragma HLS array_partition variable=encHV_full
 
 	int EPOCH = (train == 0) ? 1 : train;
 
 	int classHV[N_CLASS][Dhv];
 	//We partition each class dimensions into ROW elements to match the ROW generated dimensions.
-	#pragma HLS array_partition variable=classHV cyclic factor=ROW_ dim=2
+	#pragma HLS array_partition variable=classHV cyclic factor=ROW dim=2
 
 	//Initialize the class hypervectors.
 	loop_initClass:
@@ -215,10 +210,10 @@ void searchUnit(hls::stream<dt_int2> enc_stream[ROW], int *classHV_gmem, int *la
 		//At the beginning of each epoch, calculate 1/|C|_2 (we call "1/|C|_2" as norm2).
 		loop_norm_1:
 		for(int i_class = 0; i_class < N_CLASS; i_class++){
-			ap_int<64> total = 0;
+			uint64_t total = 0;
 			loop_norm_2:
 			for(int dim = 0; dim < Dhv; dim++){
-				#pragma HLS UNROLL factor=ROW_
+				#pragma HLS UNROLL factor=ROW
 				total += classHV[i_class][dim] * classHV[i_class][dim];
 			}
 			//Total might be 0 before the first round of training, or if some class didn't have any sample,
@@ -253,10 +248,11 @@ void searchUnit(hls::stream<dt_int2> enc_stream[ROW], int *classHV_gmem, int *la
 				loop_read_encHV:
 				for(int i = 0; i < Dhv/512; i++){
 					//#pragma HLS PIPELINE
-					ap_int<512> enc_512b = encHV_gmem[iter_read*(Dhv/512) + i];
+					HyperVector512 enc_512b = encHV_gmem[iter_read*(Dhv/512) + i];
 					for(int j = 0; j < 512/ROW; j += 1){
 						#pragma HLS UNROLL
-						encHV_full[(i*512/ROW) + j] = enc_512b.range(j*ROW+ROW-1, j*ROW);
+						//encHV_full[(i*512/ROW) + j] = enc_512b.range(j*ROW+ROW-1, j*ROW);
+						encHV_full[(i*512/ROW) + j] = enc_512b.buf[j];
 					}
 				}
 			}
@@ -264,26 +260,31 @@ void searchUnit(hls::stream<dt_int2> enc_stream[ROW], int *classHV_gmem, int *la
 			//i_dim keeps track of the global index of classes (increases by ROW after processing a block of ROW rows).
 			loop_outer:
 			for(int i_dim = 0; i_dim < Dhv/ROW; i_dim += 1){
-				ap_int<ROW> temp_partial = encHV_full[i_dim];
+				uint32_t temp_partial = encHV_full[i_dim];
 				loop_stream:
 				for(int j_sub = 0; j_sub < ROW; j_sub++){
-					#pragma HLS UNROLL factor=ROW_
+					#pragma HLS UNROLL factor=ROW
 					if(iter_epoch == 0){
 						enc_stream[j_sub] >> encHV_partial[j_sub];
 					}
 					else{
-						encHV_partial[j_sub] = temp_partial[j_sub] == 1 ? 1 : -1; //Binary to bipolar conversion.
+						encHV_partial[j_sub] = temp_partial & (1 << j_sub) ? 1 : -1; //Binary to bipolar conversion.
 					}
 				}
-				 //In the first epoch of TRAINING, initialize the classes, and store the encoded hypervector.
+				//In the first epoch of TRAINING, initialize the classes, and store the encoded hypervector.
 				if(iter_epoch == 0 && train > 0){
-					ap_int<ROW> temp_partial;
+					uint32_t temp_partial;
 					loop_init:
 					for(int j_sub = 0; j_sub < ROW; j_sub++){
-						#pragma HLS UNROLL factor=ROW_
+						#pragma HLS UNROLL factor=ROW
 						classHV[label][i_dim*ROW + j_sub] += encHV_partial[j_sub];
 						//store the dimensions (in a whole hypervector) and save to global memory for reuse in next epochs.
-						temp_partial[j_sub] = encHV_partial[j_sub] == 1 ? 1 : 0; //Bipolar to binary conversion.
+						//temp_partial[j_sub] = encHV_partial[j_sub] == 1 ? 1 : 0; //Bipolar to binary conversion.
+						if (encHV_partial[j_sub] == 1) {
+							temp_partial |= 1 << j_sub;
+						} else {
+							temp_partial &= ~(1 << j_sub);
+						}
 					}
 					encHV_full[i_dim] = temp_partial;
 				}
@@ -296,7 +297,7 @@ void searchUnit(hls::stream<dt_int2> enc_stream[ROW], int *classHV_gmem, int *la
 						#pragma HLS UNROLL
 						loop_inner:
 						for(int k_sub = 0; k_sub < ROW; k_sub++){
-							#pragma HLS UNROLL factor=ROW_
+							#pragma HLS UNROLL factor=ROW
 							//i_dim keeps track of the global index of classes (increases by ROW after processing a block of ROW rows).
 							dotProductRes[j_class] += encHV_partial[k_sub] * classHV[j_class][i_dim*ROW + k_sub];
 						}
@@ -328,10 +329,11 @@ void searchUnit(hls::stream<dt_int2> enc_stream[ROW], int *classHV_gmem, int *la
 				if(maxIndex != label){
 					loop_update:
 					for(int i_sub = 0; i_sub < Dhv/ROW; i_sub++){
-						ap_int<ROW> temp_partial = encHV_full[i_sub];
+						uint32_t temp_partial = encHV_full[i_sub];
 						for(int j = 0; j < ROW; j++){
 							#pragma HLS UNROLL
-							dt_int2 temp_dim = temp_partial[j] == 1 ? 1 : -1;
+							//int temp_dim = temp_partial[j] == 1 ? 1 : -1;
+							int temp_dim = temp_partial & (1 << j) ? 1 : -1;
 							classHV[label][i_sub*ROW + j] += temp_dim;
 							classHV[maxIndex][i_sub*ROW + j] -= temp_dim;
 						}
@@ -345,10 +347,11 @@ void searchUnit(hls::stream<dt_int2> enc_stream[ROW], int *classHV_gmem, int *la
 			if(train > 0 && iter_epoch == 0){
 				loop_writeEncHV:
 				for(int i = 0; i < Dhv/512; i++){
-					ap_int<512> enc_512b;
+					HyperVector512 enc_512b;
 					for(int j = 0; j < 512/ROW; j += 1){
 						#pragma HLS UNROLL
-						enc_512b.range(j*ROW+ROW-1, j*ROW) = encHV_full[(i*512/ROW) + j];
+						//enc_512b.range(j*ROW+ROW-1, j*ROW) = encHV_full[(i*512/ROW) + j];
+						enc_512b.buf[j] = encHV_full[(i*512/ROW) + j];
 					}
 					encHV_gmem[iter_read*(Dhv/512) + i] = enc_512b;
 				}
@@ -373,25 +376,27 @@ void searchUnit(hls::stream<dt_int2> enc_stream[ROW], int *classHV_gmem, int *la
 
 }
 
-template<int ROW_, int COL_>
-void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, ap_int<512> *encHV_gmem, int *trainScore, int train, int size){
+void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size){
 
-	static hls::stream<int> feature_stream[N_FEAT_PAD];
+	static FIFO<int> feature_stream[N_FEAT_PAD];
 	#pragma HLS STREAM variable=feature_stream depth=2
 
 	//For now, the encoding stream is integer while we are using bipolar (+1, -1) encoding. Fix it later.
-	static hls::stream<dt_int2> enc_stream[ROW];
+	static FIFO<int> enc_stream[ROW];
 	#pragma HLS STREAM variable=enc_stream depth=2
 
 	//We have a seed ID of Dhv length, and we partition it to Dhv/ROW pieces of ROW bits as we operate on ROW rows at the same time.
-	ap_int<ROW> ID[Dhv/ROW];
+	uint32_t ID[Dhv/ROW];
 	#pragma HLS array_partition variable=ID cyclic factor=4
 
 	//Initialize the seed ID hypervector.
 	int offset = 0;
+	static_assert(ROW == 32 && "In the Hetero-C++ port, ROW must be 32!");
 	loop_initID:
 	for(int i = 0; i < Dhv/32; i++){
-		ap_int<32> ID_int = ID_gmem[i];
+		uint32_t ID_int = ID_gmem[i];
+		ID[i] = ID_int;
+		/*
 		//If ROW is smaller than 32, each IDarray will fill several ID elements.
 		if(ROW < 32){
 			for(int j = 0; j < 32/ROW; j++){
@@ -404,12 +409,13 @@ void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, ap_
 			if(offset == ROW/32)
 				offset = 0;
 		}
+		*/
 	}
 
 	#pragma HLS dataflow
 	inputStream(input_gmem, feature_stream, size);
-	encodeUnit<ROW, COL>(feature_stream, ID, enc_stream, size);
-	searchUnit<ROW>(enc_stream, classHV_gmem, labels_gmem, encHV_gmem, trainScore, train, size);
+	encodeUnit(feature_stream, ID, enc_stream, size);
+	searchUnit(enc_stream, classHV_gmem, labels_gmem, encHV_gmem, trainScore, train, size);
 
 }
 
@@ -424,8 +430,7 @@ void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, ap_
  * size (input): number of data samples.
  */
 
-extern "C" {
-void hd(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, ap_int<512> *encHV_gmem, int *trainScore, int train, int size){
+void hd(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size){
 
 	#pragma HLS INTERFACE m_axi port=input_gmem   offset=slave bundle=gmem0
 	#pragma HLS INTERFACE m_axi port=ID_gmem      offset=slave bundle=gmem1
@@ -444,7 +449,6 @@ void hd(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, ap_i
 	#pragma HLS INTERFACE s_axilite port=size         bundle=control
 	#pragma HLS INTERFACE s_axilite port=return       bundle=control
 
-	top<ROW, COL>(input_gmem, ID_gmem, classHV_gmem, labels_gmem, encHV_gmem, trainScore, train, size);
+	top(input_gmem, ID_gmem, classHV_gmem, labels_gmem, encHV_gmem, trainScore, train, size);
 
-}
 }
