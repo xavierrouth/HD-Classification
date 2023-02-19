@@ -66,6 +66,7 @@ def max_match(class_hvs, enc_hv, class_norms):
 
 def train(X_train, y_train, X_test, y_test, D=500, alg='rp', epoch=20, lr=1.0, L=64):
 	
+	np.random.seed(0)
 	#randomly select 20% of train data as validation
 	permvar = np.arange(0, len(X_train))
 	np.random.shuffle(permvar)

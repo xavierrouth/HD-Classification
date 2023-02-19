@@ -12,6 +12,7 @@ from copy import deepcopy
 import argparse
 import pickle
 from sklearn import preprocessing
+import random
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', action='store', type=str, help='path to pickle dataset', required=True)
@@ -30,6 +31,8 @@ lr = inputs.lr
 L = inputs.L
 
 assert alg in ['rp', 'rp-sign', 'idlv', 'perm']
+
+random.seed(0)
 
 with open(path, 'rb') as f:
 	dataset = pickle.load(f, encoding='latin1')	
