@@ -42,7 +42,7 @@ void inputStream(int *input_gmem, FIFO<int> feature_stream[N_FEAT_PAD], int size
  * size (input): number of data samples.
  *
  */
-void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], ap_int<ROW> ID[Dhv/ROW], FIFO<ap_int<2>> enc_stream[ROW], int size){
+void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], FIFO<int> enc_stream[ROW], int size){
 
 	//Operate on ROW encoding dimension per cycle
 	int encHV_partial[ROW];
@@ -55,7 +55,7 @@ void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], ap_int<ROW> ID[Dhv/ROW], F
 	//ID register to keep ROW+COL bits for a ROW*COL window.
 	//ID memory has ROW bits per cell, so we use 2*ROW bit register (extra bits will be used in the next window).
 	//It might look a little tricky. See the report for visualization.
-	ap_int<2*ROW> ID_reg;
+	uint64_t ID_reg;
 
 	loop_inputs:
 	for(int iter_read = 0; iter_read < size; iter_read++){
@@ -85,8 +85,7 @@ void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], ap_int<ROW> ID[Dhv/ROW], F
 			//In the last block, r+1 becomes Dhv/ROW, so we start from 0 (ID bits are stored circular).
 			if(addr2 == Dhv/ROW)
 				addr2 = 0;
-			ID_reg.range(ROW-1, 0) = ID[addr1];
-			ID_reg.range(2*ROW-1, ROW) = ID[addr2];
+			ID_reg = (((uint64_t) ID[addr2]) << 32) | ((uint64_t) ID[addr1]);
 
 			//Divide each of row blocks into columns (tiles) of COL, i.e., multiply a ROW*COL tile to COL features at a given cycle.
 			loop_mat_col:
@@ -98,13 +97,13 @@ void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], ap_int<ROW> ID[Dhv/ROW], F
 				for(int i = 0; i < ROW; i++){
 					#pragma HLS UNROLL factor=ROW
 					//In each ID register of 2*ROW bits, bits [0-COL) are for the first row, [1, COL+1) for the second, and so on.
-					ap_int<COL> ID_row = ID_reg.range(i+COL-1, i);
+					uint8_t ID_row = (ID_reg >> i) & 0xFF;
 					loop_tile_col:
 					for(int j = 0; j < COL; j++){
 						#pragma HLS UNROLL factor=COL
 						//For column group c, we read features c*COL to (c+1)*COL.
 						int feature = feature_array[c*COL + j];
-						if(ID_row[j] == 1)
+						if(ID_row & (1 << j))
 							encHV_partial[i] += feature;
 						else
 							encHV_partial[i] -= feature;
@@ -122,8 +121,7 @@ void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], ap_int<ROW> ID[Dhv/ROW], F
 						addr1 = 0;
 					if(addr2 == Dhv/ROW)
 						addr2 = 0;
-					ID_reg.range(ROW-1, 0) = ID[addr1];
-					ID_reg.range(2*ROW-1, ROW) = ID[addr2];
+					ID_reg = (((uint64_t) ID[addr2]) << 32) | ((uint64_t) ID[addr1]);
 				}
 				//We have not reached the bound of ROW/COL, so the ID register contains the needed bits.
 				//Just shift right by COL, so 'ID_reg.range(i+COL-1, i)' gives the correct ID bits per each row i of the ID block.

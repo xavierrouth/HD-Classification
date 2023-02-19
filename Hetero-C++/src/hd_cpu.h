@@ -8,6 +8,7 @@ using namespace std;
 #define N_CLASS			26	//number of classes. (e.g., isolet: 26, ucihar 12)
 #define Dhv				2048 //hypervectors length
 #define COL				8 //number of columns of a matrix-vector multiplication window (keep fixed 8)
+// NOTE: For current Hetero-C++ implementation, ROW ***must*** be kept as 32. The original FPGA code uses ROW as the length of many ap_ints, which is not "standard" C++.
 #define ROW				32 //number of rows of a matrix-vector multiplication window (32, 64, 128, 256, 512)
 
 
