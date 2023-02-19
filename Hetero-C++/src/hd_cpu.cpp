@@ -377,24 +377,27 @@ void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, 
 
 }
 
-void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, ap_int<512> *encHV_gmem, int *trainScore, int train, int size){
+void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size){
 
 	static FIFO<int> feature_stream[N_FEAT_PAD];
 	#pragma HLS STREAM variable=feature_stream depth=2
 
 	//For now, the encoding stream is integer while we are using bipolar (+1, -1) encoding. Fix it later.
-	static FIFO<ap_int<2>> enc_stream[ROW];
+	static FIFO<int> enc_stream[ROW];
 	#pragma HLS STREAM variable=enc_stream depth=2
 
 	//We have a seed ID of Dhv length, and we partition it to Dhv/ROW pieces of ROW bits as we operate on ROW rows at the same time.
-	ap_int<ROW> ID[Dhv/ROW];
+	uint32_t ID[Dhv/ROW];
 	#pragma HLS array_partition variable=ID cyclic factor=4
 
 	//Initialize the seed ID hypervector.
 	int offset = 0;
+	static_assert(ROW == 32 && "In the Hetero-C++ port, ROW must be 32!");
 	loop_initID:
 	for(int i = 0; i < Dhv/32; i++){
-		ap_int<32> ID_int = ID_gmem[i];
+		uint32_t ID_int = ID_gmem[i];
+		ID[i] = ID_int;
+		/*
 		//If ROW is smaller than 32, each IDarray will fill several ID elements.
 		if(ROW < 32){
 			for(int j = 0; j < 32/ROW; j++){
@@ -407,6 +410,7 @@ void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, ap_
 			if(offset == ROW/32)
 				offset = 0;
 		}
+		*/
 	}
 
 	#pragma HLS dataflow
@@ -428,7 +432,7 @@ void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, ap_
  */
 
 extern "C" {
-void hd(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, ap_int<512> *encHV_gmem, int *trainScore, int train, int size){
+void hd(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size){
 
 	#pragma HLS INTERFACE m_axi port=input_gmem   offset=slave bundle=gmem0
 	#pragma HLS INTERFACE m_axi port=ID_gmem      offset=slave bundle=gmem1
