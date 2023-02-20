@@ -78,8 +78,8 @@ int main(int argc, char** argv)
 	t_elapsed = chrono::high_resolution_clock::now() - t_start;
 	
 	mSec = chrono::duration_cast<chrono::milliseconds>(t_elapsed).count();
-	cout << "Reading train data took " << mSec_train << " mSec" << endl;
-	cout << "Train execution took " << mSec << " mSec" << endl;
+	//cout << "Reading train data took " << mSec_train << " mSec" << endl;
+	//cout << "Train execution took " << mSec << " mSec" << endl;
 	
 	/*for(int i = 0; i < N_CLASS; i++){
 		cout << classHV_gmem[i*Dhv] << "\t" << classHV_gmem[i*Dhv + Dhv - 1] << endl;
@@ -122,8 +122,8 @@ int main(int argc, char** argv)
     	t_elapsed = chrono::high_resolution_clock::now() - t_start;
 
     	mSec = chrono::duration_cast<chrono::milliseconds>(t_elapsed).count();
-    	cout << "Reading test data took " << mSec_test << " mSec" << endl;
-	cout << "Test execution took " << mSec << " mSec" << endl;
+    	//cout << "Reading test data took " << mSec_test << " mSec" << endl;
+	//cout << "Test execution took " << mSec << " mSec" << endl;
     
     	int correct = 0;
     	for(int i = 0; i < N_TEST; i++)

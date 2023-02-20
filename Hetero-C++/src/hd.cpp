@@ -7,22 +7,17 @@
  * feature_stream (output): N_FEAT_PAD parallel streams to stream the data to the next module.
  * size (input): number of data sampels.
  */
-void inputStream(int *input_gmem, FIFO<int> feature_stream[N_FEAT_PAD], int size){
+void inputStream(int *input_gmem, FIFO<int> feature_stream[N_FEAT_PAD], int size, int iter_read){
 
-	loop_inputs:
-	for(int iter_read = 0; iter_read < size; iter_read++){
-		//#pragma HLS LOOP_TRIPCOUNT MIN=1000 MAX=1000
-		 //Need to move the pointer by intPerInput after each input
-		int offset = iter_read * N_FEAT;
-		loop_features:
-		for(int i = 0; i < N_FEAT; i++){
-			feature_stream[i] << input_gmem[offset + i];
-		}
-		for(int i = 0; i < PAD; i++){
-			feature_stream[N_FEAT + i] << 0;
-		}
+	 //Need to move the pointer by intPerInput after each input
+	int offset = iter_read * N_FEAT;
+	loop_features:
+	for(int i = 0; i < N_FEAT; i++){
+		feature_stream[i] << input_gmem[offset + i];
 	}
-
+	for(int i = 0; i < PAD; i++){
+		feature_stream[N_FEAT + i] << 0;
+	}
 }
 
 /*
@@ -38,7 +33,7 @@ void inputStream(int *input_gmem, FIFO<int> feature_stream[N_FEAT_PAD], int size
  * size (input): number of data samples.
  *
  */
-void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], FIFO<int> enc_stream[ROW], int size){
+void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], FIFO<int> enc_stream[ROW], int size, int iter_read){
 
 	//Operate on ROW encoding dimension per cycle
 	int encHV_partial[ROW];
@@ -53,92 +48,88 @@ void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], FIFO
 	//It might look a little tricky. See the report for visualization.
 	uint64_t ID_reg;
 
-	loop_inputs:
-	for(int iter_read = 0; iter_read < size; iter_read++){
-		//#pragma HLS LOOP_TRIPCOUNT MIN=1000 MAX=1000
-		//Read all features into the feature_array.
-		loop_stream:
-		for(int i = 0; i < N_FEAT_PAD; i++){
-			//#pragma HLS UNROLL factor=COL
-			feature_stream[i] >> feature_array[i];
+	//#pragma HLS LOOP_TRIPCOUNT MIN=1000 MAX=1000
+	//Read all features into the feature_array.
+	loop_stream:
+	for(int i = 0; i < N_FEAT_PAD; i++){
+		//#pragma HLS UNROLL factor=COL
+		feature_stream[i] >> feature_array[i];
+	}
+
+	//Probe ROW rows simultanously for mat-vec multplication (result = r encoding dimension).
+	//Each row block has Dhv/ROW rows.
+	loop_mat_row:
+	for(int r = 0; r < Dhv/ROW; r++){
+		//Clear the partial encoding buffer when the window starts the new rows.
+		loop_clear:
+		for(int i = 0; i < ROW; i++){
+			//#pragma HLS UNROLL factor=ROW
+			encHV_partial[i] = 0;
 		}
+		//We need to figure out which ID bits should be read.
+		//At the beginning of row block r, we read bits of the block r and r+1 (each block has Dhv/ROW bits).
+		int cycle = 0;
+		int addr1 = r;
+		int addr2 = r+1;
+		//In the last block, r+1 becomes Dhv/ROW, so we start from 0 (ID bits are stored circular).
+		if(addr2 == Dhv/ROW)
+			addr2 = 0;
+		ID_reg = (((uint64_t) ID[addr2]) << 32) | ((uint64_t) ID[addr1]);
 
-		//Probe ROW rows simultanously for mat-vec multplication (result = r encoding dimension).
-		//Each row block has Dhv/ROW rows.
-		loop_mat_row:
-		for(int r = 0; r < Dhv/ROW; r++){
-			//Clear the partial encoding buffer when the window starts the new rows.
-			loop_clear:
+		//Divide each of row blocks into columns (tiles) of COL, i.e., multiply a ROW*COL tile to COL features at a given cycle.
+		loop_mat_col:
+		for(int c = 0; c < N_FEAT_PAD/COL; c++){
+			//#pragma HLS PIPELINE
+
+			//Iterate over the rows and columns of the ROW*COL tile to perform matrix-vector multplication.
+			loop_tile_row:
 			for(int i = 0; i < ROW; i++){
 				//#pragma HLS UNROLL factor=ROW
-				encHV_partial[i] = 0;
-			}
-			//We need to figure out which ID bits should be read.
-			//At the beginning of row block r, we read bits of the block r and r+1 (each block has Dhv/ROW bits).
-			int cycle = 0;
-			int addr1 = r;
-			int addr2 = r+1;
-			//In the last block, r+1 becomes Dhv/ROW, so we start from 0 (ID bits are stored circular).
-			if(addr2 == Dhv/ROW)
-				addr2 = 0;
-			ID_reg = (((uint64_t) ID[addr2]) << 32) | ((uint64_t) ID[addr1]);
-
-			//Divide each of row blocks into columns (tiles) of COL, i.e., multiply a ROW*COL tile to COL features at a given cycle.
-			loop_mat_col:
-			for(int c = 0; c < N_FEAT_PAD/COL; c++){
-				//#pragma HLS PIPELINE
-
-				//Iterate over the rows and columns of the ROW*COL tile to perform matrix-vector multplication.
-				loop_tile_row:
-				for(int i = 0; i < ROW; i++){
-					//#pragma HLS UNROLL factor=ROW
-					//In each ID register of 2*ROW bits, bits [0-COL) are for the first row, [1, COL+1) for the second, and so on.
-					uint8_t ID_row = (ID_reg >> i) & 0xFF;
-					loop_tile_col:
-					for(int j = 0; j < COL; j++){
-						//#pragma HLS UNROLL factor=COL
-						//For column group c, we read features c*COL to (c+1)*COL.
-						int feature = feature_array[c*COL + j];
-						if(ID_row & (1 << j))
-							encHV_partial[i] += feature;
-						else
-							encHV_partial[i] -= feature;
-					}
-				}
-				//After the first window, we move the window by right.
-				//The initial 2*ROW ID block has enough bits for ROW/COL consecutive windows (as each window needs ROW+COL bits, not 2*ROW bits).
-				//Otherwise, we update the ID address to get the new required ID bits.
-				cycle += 1;
-				if(cycle == ROW/COL){
-					cycle = 0;
-					addr1 = addr1 + 1;
-					addr2 = addr2 + 1;
-					if(addr1 == Dhv/ROW)
-						addr1 = 0;
-					if(addr2 == Dhv/ROW)
-						addr2 = 0;
-					ID_reg = (((uint64_t) ID[addr2]) << 32) | ((uint64_t) ID[addr1]);
-				}
-				//We have not reached the bound of ROW/COL, so the ID register contains the needed bits.
-				//Just shift right by COL, so 'ID_reg.range(i+COL-1, i)' gives the correct ID bits per each row i of the ID block.
-				//E.g., in a 4x2 window, in the first cycle we need bits 0-1 for row 1, while in the next cycle we need bits 2-3, so shift by COL=2 is needed.
-				else{
-					ID_reg = (ID_reg >> COL);
+				//In each ID register of 2*ROW bits, bits [0-COL) are for the first row, [1, COL+1) for the second, and so on.
+				uint8_t ID_row = (ID_reg >> i) & 0xFF;
+				loop_tile_col:
+				for(int j = 0; j < COL; j++){
+					//#pragma HLS UNROLL factor=COL
+					//For column group c, we read features c*COL to (c+1)*COL.
+					int feature = feature_array[c*COL + j];
+					if(ID_row & (1 << j))
+						encHV_partial[i] += feature;
+					else
+						encHV_partial[i] -= feature;
 				}
 			}
-			//Output the ROW generated dimensions for subsequent pipelined search.
-			//Note that we use quantized random projection. Otherwise, we will need higher bit-width for classes (and tmp resgiter during dot-product).
-			loop_enc_stream:
-			for(int i = 0; i < ROW; i++){
-				//#pragma HLS UNROLL factor=ROW
-				if(encHV_partial[i] >= 0)
-					enc_stream[i] << 1;
-				else
-					enc_stream[i] << -1;
+			//After the first window, we move the window by right.
+			//The initial 2*ROW ID block has enough bits for ROW/COL consecutive windows (as each window needs ROW+COL bits, not 2*ROW bits).
+			//Otherwise, we update the ID address to get the new required ID bits.
+			cycle += 1;
+			if(cycle == ROW/COL){
+				cycle = 0;
+				addr1 = addr1 + 1;
+				addr2 = addr2 + 1;
+				if(addr1 == Dhv/ROW)
+					addr1 = 0;
+				if(addr2 == Dhv/ROW)
+					addr2 = 0;
+				ID_reg = (((uint64_t) ID[addr2]) << 32) | ((uint64_t) ID[addr1]);
 			}
+			//We have not reached the bound of ROW/COL, so the ID register contains the needed bits.
+			//Just shift right by COL, so 'ID_reg.range(i+COL-1, i)' gives the correct ID bits per each row i of the ID block.
+			//E.g., in a 4x2 window, in the first cycle we need bits 0-1 for row 1, while in the next cycle we need bits 2-3, so shift by COL=2 is needed.
+			else{
+				ID_reg = (ID_reg >> COL);
+			}
+		}
+		//Output the ROW generated dimensions for subsequent pipelined search.
+		//Note that we use quantized random projection. Otherwise, we will need higher bit-width for classes (and tmp resgiter during dot-product).
+		loop_enc_stream:
+		for(int i = 0; i < ROW; i++){
+			//#pragma HLS UNROLL factor=ROW
+			if(encHV_partial[i] >= 0)
+				enc_stream[i] << 1;
+			else
+				enc_stream[i] << -1;
 		}
 	}
-	//Iterating over inputs ends here.
 }
 
 /*
@@ -195,7 +186,6 @@ void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, 
 	}
 
 	int correct = -1;
-
 	loop_repeat:
 	for(int iter_epoch = 0; iter_epoch < EPOCH; iter_epoch++){
 		//#pragma HLS LOOP_TRIPCOUNT MIN=1 MAX=1
@@ -357,7 +347,6 @@ void searchUnit(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, 
 		if(train > 0 && iter_epoch > 0)
 			cout << "Training epoch " << iter_epoch << " accuracy: " << float(correct)/size << endl;
 	}
-
 	//At the end of retraining, write back the generated classes.
 	if(train > 0){
 		loop_writeClasses:
@@ -409,10 +398,19 @@ void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, Hyp
 	}
 
 	//#pragma HLS dataflow
-	inputStream(input_gmem, feature_stream, size);
-	encodeUnit(feature_stream, ID, enc_stream, size);
+	for(int iter_read = 0; iter_read < size; iter_read++) {
+		inputStream(input_gmem, feature_stream, size, iter_read);
+		encodeUnit(feature_stream, ID, enc_stream, size, iter_read);
+	}
 	searchUnit(enc_stream, classHV_gmem, labels_gmem, encHV_gmem, trainScore, train, size);
 
+	/*for (int i = 0; i < N_FEAT_PAD; ++i)
+		std::cout << "Feature stream #" << i << " total pushes " << feature_stream[i].total_pushes << "\n";
+	for (int i = 0; i < ROW; ++i)
+		std::cout << "Enc stream #" << i << " total pushes " << enc_stream[i].total_pushes << "\n";*/
+
+	delete[] feature_stream;
+	delete[] enc_stream;
 }
 
 /*

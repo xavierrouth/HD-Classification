@@ -24,12 +24,14 @@ using namespace std;
 template <typename T, std::size_t size = 1000000>
 struct FIFO {
         std::size_t head = 0, tail = 0;
-        std::size_t len;
+        std::size_t len = 0;
+	std::size_t total_pushes = 0;
         T buf[size] = {0};
 
         void push(T t) {
                 assert(len < size);
                 ++len;
+		++total_pushes;
                 buf[head] = t;
                 head = (head + 1) % size;
         }
