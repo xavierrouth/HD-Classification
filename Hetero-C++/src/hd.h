@@ -21,16 +21,17 @@ using namespace std;
 
 #define N_FEAT_PAD		(N_FEAT + PAD)	//feature per input (e.g., isolet: 624, ucihar 568)
 
-template <typename T, std::size_t size = 1000000>
+template <typename T, std::size_t size = 64>
 struct FIFO {
         std::size_t head = 0, tail = 0;
         std::size_t len = 0;
-	std::size_t total_pushes = 0;
+	std::size_t total_pushes = 0, max_len = 0;
         T buf[size] = {0};
 
         void push(T t) {
                 assert(len < size);
                 ++len;
+		max_len = max_len < len ? len : max_len;
 		++total_pushes;
                 buf[head] = t;
                 head = (head + 1) % size;
