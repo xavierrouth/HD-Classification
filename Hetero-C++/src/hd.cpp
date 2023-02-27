@@ -407,7 +407,7 @@ void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, Hyp
 
 	//Initialize the seed ID hypervector.
 	int offset = 0;
-	static_assert(ROW == 32 && "In the Hetero-C++ port, ROW must be 32!");
+	static_assert(ROW == 32, "In the Hetero-C++ port, ROW must be 32!");
 	loop_initID:
 	for (int i = 0; i < Dhv/32; i++) {
 		uint32_t ID_int = ID_gmem[i];
