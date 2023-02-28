@@ -1,0 +1,4 @@
+*/__pycache__
+dataset/*.pickle
+dataset/*.choir
+dataset/*.bin
