@@ -29,7 +29,9 @@ struct FIFO {
         T buf[size] = {0};
 
         void push(T t) {
+#ifndef HPVM
                 assert(len < size);
+#endif
                 ++len;
 		max_len = max_len < len ? len : max_len;
 		++total_pushes;
@@ -38,7 +40,9 @@ struct FIFO {
         }
 
         T pop() {
+#ifndef HPVM
                 assert(len > 0);
+#endif
                 --len;
                 T t = buf[tail];
                 tail = (tail + 1) % size;
