@@ -48,8 +48,8 @@ int main(int argc, char** argv)
 	for(int i = 0; i < Dhv/32; i++){
 		long double temp = log2(i+2.5) * pow(2, 31);
 		long long int temp2 = (long long int)(temp);
-		temp2 = temp2 % int(pow(2, 31));
-		ID_gmem[i] = int(temp2);
+		temp2 = temp2 % 2147483648;
+		ID_gmem[i] = (int) temp2;
 		//ID_gmem[i] = int(rand());
 	}
 	vector<int, aligned_allocator<int>> classHV_gmem(N_CLASS*Dhv);	
