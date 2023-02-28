@@ -1,22 +1,14 @@
-# targets
-HOST_EXE := host
+INCLUDES += -I$(HPVM_INSTALL_DIR)/include -I$(HPVM_INSTALL_DIR)/benchmarks/include
 
-CFLAGS := -g -std=c++11
+CFLAGS :=
 LFLAGS :=
 
-# primary build targets
-.PHONY: all clean
+host-normal: src/host.cpp src/hd.cpp src/host.h src/hd.h src/hd.h
+	clang++ $(CFLAGS) -o $@ src/host.cpp src/hd.cpp $(LFLAGS)
+host-hetero: src/host.cpp src/hd.cpp src/host.h src/hd.h src/hd.h
+	hpvm-clang -v -DHPVM -DDEVICE=CPU_TARGET --hetero-cc --hpvm-target cpu -d build $(INCLUDES) src/hd.cpp src/host.cpp -o host-hetero
 
-all: $(HOST_EXE)
+.PHONY: clean
 
 clean:
-	rm -f $(HOST_EXE) build/*.o
-
-# $(HOST_EXE): build/host.o build/hd.o
-# 	g++ $(CFLAGS) -o $@ $^ $(LFLAGS)
-# build/host.o: src/host.cpp src/host.h src/hd.h
-# 	g++ $(CFLAGS) -c -o $@ $<
-# build/hd.o: src/hd.cpp src/hd.h
-# 	g++ $(CFLAGS) -c -o $@ $<
-$(HOST_EXE): src/host.cpp src/hd.cpp src/host.h src/hd.h
-	hpvm-clang -DDEVICE=CPU_TARGET --hetero-cc --hpvm-target cpu -d build src/hd.cpp src/host.cpp -o host
+	rm -f host-normal host-hetero build/*.o
