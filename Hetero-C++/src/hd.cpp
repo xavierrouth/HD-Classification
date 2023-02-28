@@ -1,3 +1,6 @@
+#ifdef HPVM
+#include <heterocc.h>
+#endif
 #include "hd.h"
 
 /*
@@ -7,7 +10,7 @@
  * feature_stream (output): N_FEAT_PAD parallel streams to stream the data to the next module.
  * size (input): number of data sampels.
  */
-void inputStream(int *input_gmem, FIFO<int> feature_stream[N_FEAT_PAD], int size, int iter_read) {
+void inputStream(int *input_gmem, FIFO<int, 1> feature_stream[N_FEAT_PAD], int size, int iter_read) {
 
 	 //Need to move the pointer by intPerInput after each input
 	int offset = iter_read * N_FEAT;
@@ -33,7 +36,7 @@ void inputStream(int *input_gmem, FIFO<int> feature_stream[N_FEAT_PAD], int size
  * size (input): number of data samples.
  *
  */
-void encodeUnit(FIFO<int> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], FIFO<int> enc_stream[ROW], int size, int iter_read) {
+void encodeUnit(FIFO<int, 1> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], FIFO<int> enc_stream[ROW], int size, int iter_read) {
 
 	//Operate on ROW encoding dimension per cycle
 	int encHV_partial[ROW];
@@ -397,17 +400,17 @@ void searchUnitRestEpochs(int *classHV_gmem, int *labels_gmem, HyperVector512 *e
 
 void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size) {
 
-	FIFO<int> *feature_stream = new FIFO<int>[N_FEAT_PAD];
+	FIFO<int, 1> feature_stream[N_FEAT_PAD];
 
 	//For now, the encoding stream is integer while we are using bipolar (+1, -1) encoding. Fix it later.
-	FIFO<int> *enc_stream = new FIFO<int>[ROW];
+	FIFO<int> enc_stream[ROW];
 
 	//We have a seed ID of Dhv length, and we partition it to Dhv/ROW pieces of ROW bits as we operate on ROW rows at the same time.
 	uint32_t ID[Dhv/ROW];
 
 	//Initialize the seed ID hypervector.
 	int offset = 0;
-	static_assert(ROW == 32 && "In the Hetero-C++ port, ROW must be 32!");
+	static_assert(ROW == 32, "In the Hetero-C++ port, ROW must be 32!");
 	loop_initID:
 	for (int i = 0; i < Dhv/32; i++) {
 		uint32_t ID_int = ID_gmem[i];
@@ -452,8 +455,7 @@ void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, Hyp
 	}
 	searchUnitRestEpochs(classHV_gmem, labels_gmem, encHV_gmem, trainScore, train, size, encHV_partial, dotProductRes, norm2_inv, encHV_full, classHV);
 
-	delete[] feature_stream;
-	delete[] enc_stream;
+	printf("max len: %lu %lu\n", feature_stream[0].max_len, enc_stream[0].max_len);
 }
 
 /*
@@ -466,6 +468,39 @@ void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, Hyp
  * train (input): number of training epochs (0 = inference)
  * size (input): number of data samples.
  */
-void hd(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size) {
+#ifdef HPVM
+void hd(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t ID_gmem_size, int *classHV_gmem, std::size_t classHV_gmem_size, int *labels_gmem, std::size_t labels_gmem_size, HyperVector512 *encHV_gmem, std::size_t encHV_gmem_size, int *trainScore, std::size_t trainScore_size, int train, int size) {
+	void *Section = __hetero_section_begin();
+	void *Wrapper = __hetero_task_begin(
+					/* Num Input Pairs */ 8,
+					input_gmem, input_gmem_size, 
+					ID_gmem, ID_gmem_size, 					
+					classHV_gmem, classHV_gmem_size,
+					labels_gmem, labels_gmem_size,
+					encHV_gmem, encHV_gmem_size,
+					trainScore, trainScore_size,
+					train,
+					size,
+					/* Num Output Pairs */ 6,
+					input_gmem, input_gmem_size, 
+					ID_gmem, ID_gmem_size, 					
+					classHV_gmem, classHV_gmem_size,
+					labels_gmem, labels_gmem_size,
+					encHV_gmem, encHV_gmem_size,
+					trainScore, trainScore_size,
+					/* Optional Node Name */ "top_hd_task");
+
+	printf("%d %d\n", train, size);
+	printf("%lu %lu %lu %lu %lu %lu\n", input_gmem_size, ID_gmem_size, classHV_gmem_size, labels_gmem_size, encHV_gmem_size, trainScore_size);
+	top(input_gmem, ID_gmem, classHV_gmem, labels_gmem, encHV_gmem, trainScore, train, size);
+
+	__hetero_task_end(Wrapper);
+	__hetero_section_end(Section);
+}
+#else
+void hd(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t ID_gmem_size, int *classHV_gmem, std::size_t classHV_gmem_size, int *labels_gmem, std::size_t labels_gmem_size, HyperVector512 *encHV_gmem, std::size_t encHV_gmem_size, int *trainScore, std::size_t trainScore_size, int train, int size) {
+	printf("%d %d\n", train, size);
+	printf("%lu %lu %lu %lu %lu %lu\n", input_gmem_size, ID_gmem_size, classHV_gmem_size, labels_gmem_size, encHV_gmem_size, trainScore_size);
 	top(input_gmem, ID_gmem, classHV_gmem, labels_gmem, encHV_gmem, trainScore, train, size);
 }
+#endif

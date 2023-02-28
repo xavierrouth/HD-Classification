@@ -1,3 +1,6 @@
+#ifdef HPVM
+#include <heterocc.h>
+#endif
 #include "host.h"
 #include "hd.h"
 
@@ -64,17 +67,46 @@ int main(int argc, char** argv)
 	auto buf_labels = labels_gmem.data();
 	auto buf_encHV = encHV_gmem.data();
 	auto buf_trainScore = trainScore.data();
+	auto buf_input_size = input_gmem.size() * sizeof(*buf_input);
+	auto buf_ID_size = ID_gmem.size() * sizeof(*buf_ID);
+	auto buf_classHV_size = classHV_gmem.size() * sizeof(*buf_classHV);
+	auto buf_labels_size = labels_gmem.size() * sizeof(*buf_labels);
+	auto buf_encHV_size = encHV_gmem.size() * sizeof(*buf_encHV);
+	auto buf_trainScore_size = trainScore.size() * sizeof(*buf_trainScore);
 	cout << "Training with " << N_SAMPLE << " samples." << endl;
 
 	t_start = chrono::high_resolution_clock::now();
-	hd(buf_input,
-	   buf_ID,
-	   buf_classHV,
-	   buf_labels,
-	   buf_encHV,
-	   buf_trainScore,
+#ifdef HPVM
+	void *HDTrainDFG = __hetero_launch(
+		(void *) hd,
+		8, 
+		buf_input, buf_input_size,
+		buf_ID, buf_ID_size,
+		buf_classHV, buf_classHV_size,
+		buf_labels, buf_labels_size,
+		buf_encHV, buf_encHV_size,
+		buf_trainScore, buf_trainScore_size,
+		train,
+		N_SAMPLE,
+		6,
+		buf_input, buf_input_size,
+		buf_ID, buf_ID_size,
+		buf_classHV, buf_classHV_size,
+		buf_labels, buf_labels_size,
+		buf_encHV, buf_encHV_size,
+		buf_trainScore, buf_trainScore_size
+	);
+	__hetero_wait(HDTrainDFG);
+#else
+	hd(buf_input, buf_input_size,
+	   buf_ID, buf_ID_size,
+	   buf_classHV, buf_classHV_size,
+	   buf_labels, buf_labels_size,
+	   buf_encHV, buf_encHV_size,
+	   buf_trainScore, buf_trainScore_size,
 	   train,
 	   N_SAMPLE);
+#endif
 	t_elapsed = chrono::high_resolution_clock::now() - t_start;
 	
 	mSec = chrono::duration_cast<chrono::milliseconds>(t_elapsed).count();
@@ -108,17 +140,42 @@ int main(int argc, char** argv)
 	
 	auto buf_input2 = input_gmem.data();
 	auto buf_labels2 = labels_gmem.data();
+	auto buf_input2_size = input_gmem.size() * sizeof(*buf_input2);
+	auto buf_labels2_size = labels_gmem.size() * sizeof(*buf_labels2);
     	train = 0; //i.e., inference
 
 	t_start = chrono::high_resolution_clock::now();
-	hd(buf_input2,
-	   buf_ID,
-	   buf_classHV,
-	   buf_labels2,
-	   buf_encHV,
-	   buf_trainScore,
+#ifdef HPVM
+	void *HDTestDFG = __hetero_launch(
+		(void *) hd,
+		8, 
+		buf_input2, buf_input2_size,
+		buf_ID, buf_ID_size,
+		buf_classHV, buf_classHV_size,
+		buf_labels2, buf_labels2_size,
+		buf_encHV, buf_encHV_size,
+		buf_trainScore, buf_trainScore_size,
+		train,
+		N_SAMPLE,
+		6,
+		buf_input2, buf_input2_size,
+		buf_ID, buf_ID_size,
+		buf_classHV, buf_classHV_size,
+		buf_labels2, buf_labels2_size,
+		buf_encHV, buf_encHV_size,
+		buf_trainScore, buf_trainScore_size
+	);
+	__hetero_wait(HDTestDFG);
+#else
+	hd(buf_input2, buf_input2_size,
+	   buf_ID, buf_ID_size,
+	   buf_classHV, buf_classHV_size,
+	   buf_labels2, buf_labels2_size,
+	   buf_encHV, buf_encHV_size,
+	   buf_trainScore, buf_trainScore_size,
 	   train,
 	   N_SAMPLE);
+#endif
     	t_elapsed = chrono::high_resolution_clock::now() - t_start;
 
     	mSec = chrono::duration_cast<chrono::milliseconds>(t_elapsed).count();
