@@ -138,11 +138,11 @@ int main(int argc, char** argv)
 	int N_TEST = y_test.size();
 	labels_gmem.resize(N_TEST);
 	
+    	train = 0; //i.e., inference
 	auto buf_input2 = input_gmem.data();
 	auto buf_labels2 = labels_gmem.data();
 	auto buf_input2_size = input_gmem.size() * sizeof(*buf_input2);
 	auto buf_labels2_size = labels_gmem.size() * sizeof(*buf_labels2);
-    	train = 0; //i.e., inference
 
 	t_start = chrono::high_resolution_clock::now();
 #ifdef HPVM

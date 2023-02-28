@@ -383,8 +383,8 @@ void searchUnitRestEpochs(int *classHV_gmem, int *labels_gmem, HyperVector512 *e
 			}
 		}
 		//An epoch finishes here.
-		if (train > 0)
-			cout << "Training epoch " << iter_epoch << " accuracy: " << float(correct)/size << endl;
+		//if (train > 0)
+			//cout << "Training epoch " << iter_epoch << " accuracy: " << float(correct)/size << endl;
 	}
 	//At the end of retraining, write back the generated classes.
 	if (train > 0) {
@@ -398,7 +398,29 @@ void searchUnitRestEpochs(int *classHV_gmem, int *labels_gmem, HyperVector512 *e
 	}
 }
 
-void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size) {
+void top(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t ID_gmem_size, int *classHV_gmem, std::size_t classHV_gmem_size, int *labels_gmem, std::size_t labels_gmem_size, HyperVector512 *encHV_gmem, std::size_t encHV_gmem_size, int *trainScore, std::size_t trainScore_size, int train, int size) {
+#ifdef HPVM
+	void *top_Section = __hetero_section_begin();
+	void *top_Wrapper = __hetero_task_begin(
+					/* Num Input Pairs */ 8,
+					input_gmem, input_gmem_size, 
+					ID_gmem, ID_gmem_size, 					
+					classHV_gmem, classHV_gmem_size,
+					labels_gmem, labels_gmem_size,
+					encHV_gmem, encHV_gmem_size,
+					trainScore, trainScore_size,
+					train,
+					size,
+					/* Num Output Pairs */ 6,
+					input_gmem, input_gmem_size, 
+					ID_gmem, ID_gmem_size, 					
+					classHV_gmem, classHV_gmem_size,
+					labels_gmem, labels_gmem_size,
+					encHV_gmem, encHV_gmem_size,
+					trainScore, trainScore_size,
+					/* Optional Node Name */ "top_task");
+	//__hpvm__hint(DEVICE);
+#endif
 
 	FIFO<int, 1> feature_stream[N_FEAT_PAD];
 
@@ -455,7 +477,10 @@ void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, Hyp
 	}
 	searchUnitRestEpochs(classHV_gmem, labels_gmem, encHV_gmem, trainScore, train, size, encHV_partial, dotProductRes, norm2_inv, encHV_full, classHV);
 
-	printf("max len: %lu %lu\n", feature_stream[0].max_len, enc_stream[0].max_len);
+#ifdef HPVM
+	__hetero_task_end(top_Wrapper);
+	__hetero_section_end(top_Section);
+#endif
 }
 
 /*
@@ -468,10 +493,10 @@ void top(int *input_gmem, int *ID_gmem, int *classHV_gmem, int *labels_gmem, Hyp
  * train (input): number of training epochs (0 = inference)
  * size (input): number of data samples.
  */
-#ifdef HPVM
 void hd(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t ID_gmem_size, int *classHV_gmem, std::size_t classHV_gmem_size, int *labels_gmem, std::size_t labels_gmem_size, HyperVector512 *encHV_gmem, std::size_t encHV_gmem_size, int *trainScore, std::size_t trainScore_size, int train, int size) {
-	void *Section = __hetero_section_begin();
-	void *Wrapper = __hetero_task_begin(
+#ifdef HPVM
+	void *hd_Section = __hetero_section_begin();
+	void *hd_Wrapper = __hetero_task_begin(
 					/* Num Input Pairs */ 8,
 					input_gmem, input_gmem_size, 
 					ID_gmem, ID_gmem_size, 					
@@ -488,19 +513,13 @@ void hd(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t 
 					labels_gmem, labels_gmem_size,
 					encHV_gmem, encHV_gmem_size,
 					trainScore, trainScore_size,
-					/* Optional Node Name */ "top_hd_task");
-
-	printf("%d %d\n", train, size);
-	printf("%lu %lu %lu %lu %lu %lu\n", input_gmem_size, ID_gmem_size, classHV_gmem_size, labels_gmem_size, encHV_gmem_size, trainScore_size);
-	top(input_gmem, ID_gmem, classHV_gmem, labels_gmem, encHV_gmem, trainScore, train, size);
-
-	__hetero_task_end(Wrapper);
-	__hetero_section_end(Section);
-}
-#else
-void hd(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t ID_gmem_size, int *classHV_gmem, std::size_t classHV_gmem_size, int *labels_gmem, std::size_t labels_gmem_size, HyperVector512 *encHV_gmem, std::size_t encHV_gmem_size, int *trainScore, std::size_t trainScore_size, int train, int size) {
-	printf("%d %d\n", train, size);
-	printf("%lu %lu %lu %lu %lu %lu\n", input_gmem_size, ID_gmem_size, classHV_gmem_size, labels_gmem_size, encHV_gmem_size, trainScore_size);
-	top(input_gmem, ID_gmem, classHV_gmem, labels_gmem, encHV_gmem, trainScore, train, size);
-}
+					/* Optional Node Name */ "hd_task");
 #endif
+
+	top(input_gmem, input_gmem_size, ID_gmem, ID_gmem_size, classHV_gmem, classHV_gmem_size, labels_gmem, labels_gmem_size, encHV_gmem, encHV_gmem_size, trainScore, trainScore_size, train, size);
+
+#ifdef HPVM
+	__hetero_task_end(hd_Wrapper);
+	__hetero_section_end(hd_Section);
+#endif
+}
