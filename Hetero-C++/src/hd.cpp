@@ -36,7 +36,7 @@ void inputStream(int *input_gmem, int feature_stream[N_FEAT_PAD], int size, int 
  * size (input): number of data samples.
  *
  */
-void encodeUnit(int feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], int enc_stream[ROW][Dhv/ROW], int size, int iter_read) {
+void encodeUnit(int feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], int enc_stream[Dhv], int size, int iter_read) {
 
 	//Operate on ROW encoding dimension per cycle
 	int encHV_partial[ROW];
@@ -111,9 +111,9 @@ void encodeUnit(int feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], int enc_st
 		loop_enc_stream:
 		for (int i = 0; i < ROW; i++) {
 			if (encHV_partial[i] >= 0)
-				enc_stream[i][r] = 1;
+				enc_stream[i + r * Dhv / ROW] = 1;
 			else
-				enc_stream[i][r] = -1;
+				enc_stream[i + r * Dhv / ROW] = -1;
 		}
 	}
 }
@@ -135,7 +135,7 @@ void encodeUnit(int feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], int enc_st
  * searchUnitFirstEpoch runs searchUnit for the first epoch, searchUnitRestEpochs runs searchUnit for the rest of the epochs.
  * These are kept separate because of how searchUnit reads from the FIFOs.
  */
-void searchUnitFirstEpoch(int enc_stream[ROW][Dhv/ROW], int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size, int iter_read, int encHV_partial[ROW], int dotProductRes[N_CLASS], float norm2_inv[N_CLASS], uint32_t encHV_full[Dhv/ROW], int classHV[N_CLASS][Dhv]) {
+void searchUnitFirstEpoch(int enc_stream[Dhv], int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size, int iter_read, int encHV_partial[ROW], int dotProductRes[N_CLASS], float norm2_inv[N_CLASS], uint32_t encHV_full[Dhv/ROW], int classHV[N_CLASS][Dhv]) {
 	if (iter_read == 0) {
 		//Initialize the class hypervectors.
 		loop_initClass:
@@ -188,7 +188,7 @@ void searchUnitFirstEpoch(int enc_stream[ROW][Dhv/ROW], int *classHV_gmem, int *
 		uint32_t temp_partial = encHV_full[i_dim];
 		loop_stream:
 		for (int j_sub = 0; j_sub < ROW; j_sub++) {
-			encHV_partial[j_sub] = enc_stream[j_sub][i_dim];
+			encHV_partial[j_sub] = enc_stream[j_sub + i_dim * Dhv / ROW];
 		}
 		//In the first epoch of TRAINING, initialize the classes, and store the encoded hypervector.
 		if (train > 0) {
@@ -395,7 +395,7 @@ void top(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t
 	int feature_stream[N_FEAT_PAD];
 
 	//For now, the encoding stream is integer while we are using bipolar (+1, -1) encoding. Fix it later.
-	int enc_stream[ROW][Dhv/ROW];
+	int enc_stream[Dhv];
 
 	//We have a seed ID of Dhv length, and we partition it to Dhv/ROW pieces of ROW bits as we operate on ROW rows at the same time.
 	uint32_t ID[Dhv/ROW];
