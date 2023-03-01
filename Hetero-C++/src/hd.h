@@ -21,51 +21,6 @@ using namespace std;
 
 #define N_FEAT_PAD		(N_FEAT + PAD)	//feature per input (e.g., isolet: 624, ucihar 568)
 
-template <typename T, std::size_t size = 64>
-struct FIFO {
-        std::size_t head = 0, tail = 0;
-        std::size_t len = 0;
-	std::size_t total_pushes = 0, max_len = 0;
-        T buf[size] = {0};
-
-        void push(T t) {
-#ifndef HPVM
-                assert(len < size);
-#endif
-                ++len;
-		max_len = max_len < len ? len : max_len;
-		++total_pushes;
-                buf[head] = t;
-                head = (head + 1) % size;
-        }
-
-        T pop() {
-#ifndef HPVM
-                assert(len > 0);
-#endif
-                --len;
-                T t = buf[tail];
-                tail = (tail + 1) % size;
-                return t;
-        }
-
-	void clear() {
-		len = 0;
-		head = 0;
-		tail = 0;
-	}
-
-	friend FIFO<T, size> &operator<<(FIFO<T, size> &fifo, const T &t) {
-		fifo.push(t);
-		return fifo;
-	}
-
-	friend FIFO<T, size> &operator>>(FIFO<T, size> &fifo, T &t) {
-		t = fifo.pop();
-		return fifo;
-	}
-};
-
 struct HyperVector512 {
 	uint32_t buf[512 / 32];
 };

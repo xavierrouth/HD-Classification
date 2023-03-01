@@ -10,16 +10,16 @@
  * feature_stream (output): N_FEAT_PAD parallel streams to stream the data to the next module.
  * size (input): number of data sampels.
  */
-void inputStream(int *input_gmem, FIFO<int, 1> feature_stream[N_FEAT_PAD], int size, int iter_read) {
+void inputStream(int *input_gmem, int feature_stream[N_FEAT_PAD], int size, int iter_read) {
 
 	 //Need to move the pointer by intPerInput after each input
 	int offset = iter_read * N_FEAT;
 	loop_features:
 	for (int i = 0; i < N_FEAT; i++) {
-		feature_stream[i] << input_gmem[offset + i];
+		feature_stream[i] = input_gmem[offset + i];
 	}
 	for (int i = 0; i < PAD; i++) {
-		feature_stream[N_FEAT + i] << 0;
+		feature_stream[N_FEAT + i] = 0;
 	}
 }
 
@@ -36,24 +36,17 @@ void inputStream(int *input_gmem, FIFO<int, 1> feature_stream[N_FEAT_PAD], int s
  * size (input): number of data samples.
  *
  */
-void encodeUnit(FIFO<int, 1> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], FIFO<int> enc_stream[ROW], int size, int iter_read) {
+void encodeUnit(int feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], int enc_stream[ROW][Dhv/ROW], int size, int iter_read) {
 
 	//Operate on ROW encoding dimension per cycle
 	int encHV_partial[ROW];
 
-	int feature_array[N_FEAT_PAD];
 	//Factor the feature memory into COL, as we read COL elements of it in parallel.
 
 	//ID register to keep ROW+COL bits for a ROW*COL window.
 	//ID memory has ROW bits per cell, so we use 2*ROW bit register (extra bits will be used in the next window).
 	//It might look a little tricky. See the report for visualization.
 	uint64_t ID_reg;
-
-	//Read all features into the feature_array.
-	loop_stream:
-	for (int i = 0; i < N_FEAT_PAD; i++) {
-		feature_stream[i] >> feature_array[i];
-	}
 
 	//Probe ROW rows simultanously for mat-vec multplication (result = r encoding dimension).
 	//Each row block has Dhv/ROW rows.
@@ -85,7 +78,7 @@ void encodeUnit(FIFO<int, 1> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], F
 				loop_tile_col:
 				for (int j = 0; j < COL; j++) {
 					//For column group c, we read features c*COL to (c+1)*COL.
-					int feature = feature_array[c*COL + j];
+					int feature = feature_stream[c*COL + j];
 					if (ID_row & (1 << j))
 						encHV_partial[i] += feature;
 					else
@@ -118,9 +111,9 @@ void encodeUnit(FIFO<int, 1> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], F
 		loop_enc_stream:
 		for (int i = 0; i < ROW; i++) {
 			if (encHV_partial[i] >= 0)
-				enc_stream[i] << 1;
+				enc_stream[i][r] = 1;
 			else
-				enc_stream[i] << -1;
+				enc_stream[i][r] = -1;
 		}
 	}
 }
@@ -142,7 +135,7 @@ void encodeUnit(FIFO<int, 1> feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], F
  * searchUnitFirstEpoch runs searchUnit for the first epoch, searchUnitRestEpochs runs searchUnit for the rest of the epochs.
  * These are kept separate because of how searchUnit reads from the FIFOs.
  */
-void searchUnitFirstEpoch(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size, int iter_read, int encHV_partial[ROW], int dotProductRes[N_CLASS], float norm2_inv[N_CLASS], uint32_t encHV_full[Dhv/ROW], int classHV[N_CLASS][Dhv]) {
+void searchUnitFirstEpoch(int enc_stream[ROW][Dhv/ROW], int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size, int iter_read, int encHV_partial[ROW], int dotProductRes[N_CLASS], float norm2_inv[N_CLASS], uint32_t encHV_full[Dhv/ROW], int classHV[N_CLASS][Dhv]) {
 	if (iter_read == 0) {
 		//Initialize the class hypervectors.
 		loop_initClass:
@@ -191,11 +184,11 @@ void searchUnitFirstEpoch(FIFO<int> enc_stream[ROW], int *classHV_gmem, int *lab
 	//In the first EPOCH, will read Dhv encoding dimensions, ROW by ROW (ROW dimensions per Dhv/COL cycles).
 	//i_dim keeps track of the global index of classes (increases by ROW after processing a block of ROW rows).
 	loop_outer:
-	for (int i_dim = 0; i_dim < Dhv/ROW; i_dim += 1) {
+	for (int i_dim = 0; i_dim < Dhv/ROW; ++i_dim) {
 		uint32_t temp_partial = encHV_full[i_dim];
 		loop_stream:
 		for (int j_sub = 0; j_sub < ROW; j_sub++) {
-			enc_stream[j_sub] >> encHV_partial[j_sub];
+			encHV_partial[j_sub] = enc_stream[j_sub][i_dim];
 		}
 		//In the first epoch of TRAINING, initialize the classes, and store the encoded hypervector.
 		if (train > 0) {
@@ -399,10 +392,10 @@ void searchUnitRestEpochs(int *classHV_gmem, int *labels_gmem, HyperVector512 *e
 }
 
 void top(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t ID_gmem_size, int *classHV_gmem, std::size_t classHV_gmem_size, int *labels_gmem, std::size_t labels_gmem_size, HyperVector512 *encHV_gmem, std::size_t encHV_gmem_size, int *trainScore, std::size_t trainScore_size, int train, int size) {
-	FIFO<int, 1> feature_stream[N_FEAT_PAD];
+	int feature_stream[N_FEAT_PAD];
 
 	//For now, the encoding stream is integer while we are using bipolar (+1, -1) encoding. Fix it later.
-	FIFO<int> enc_stream[ROW];
+	int enc_stream[ROW][Dhv/ROW];
 
 	//We have a seed ID of Dhv length, and we partition it to Dhv/ROW pieces of ROW bits as we operate on ROW rows at the same time.
 	uint32_t ID[Dhv/ROW];
@@ -411,7 +404,7 @@ void top(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t
 	int offset = 0;
 	static_assert(ROW == 32, "In the Hetero-C++ port, ROW must be 32!");
 	loop_initID:
-	for (int i = 0; i < Dhv/32; i++) {
+	for (int i = 0; i < Dhv/ROW; i++) {
 		uint32_t ID_int = ID_gmem[i];
 		ID[i] = ID_int;
 		/*
