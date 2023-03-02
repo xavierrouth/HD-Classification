@@ -111,9 +111,9 @@ void encodeUnit(int feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], int enc_st
 		loop_enc_stream:
 		for (int i = 0; i < ROW; i++) {
 			if (encHV_partial[i] >= 0)
-				enc_stream[i + r * Dhv / ROW] = 1;
+				enc_stream[i * Dhv / ROW + r] = 1;
 			else
-				enc_stream[i + r * Dhv / ROW] = -1;
+				enc_stream[i * Dhv / ROW + r] = -1;
 		}
 	}
 }
@@ -135,7 +135,7 @@ void encodeUnit(int feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], int enc_st
  * searchUnitFirstEpoch runs searchUnit for the first epoch, searchUnitRestEpochs runs searchUnit for the rest of the epochs.
  * These are kept separate because of how searchUnit reads from the FIFOs.
  */
-void searchUnitFirstEpoch(int enc_stream[Dhv], int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size, int iter_read, int encHV_partial[ROW], int dotProductRes[N_CLASS], float norm2_inv[N_CLASS], uint32_t encHV_full[Dhv/ROW], int classHV[N_CLASS][Dhv]) {
+void searchUnitFirstEpoch(int enc_stream[Dhv], int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size, int iter_read, int encHV_partial[ROW], int dotProductRes[N_CLASS], float norm2_inv[N_CLASS], uint32_t encHV_full[Dhv/ROW], int classHV[N_CLASS * Dhv]) {
 	if (iter_read == 0) {
 		//Initialize the class hypervectors.
 		loop_initClass:
@@ -143,10 +143,10 @@ void searchUnitFirstEpoch(int enc_stream[Dhv], int *classHV_gmem, int *labels_gm
 			for (int dim = 0; dim < Dhv; dim++) {
 				//For inference, class hypervectors are given.
 				if (train == 0)
-					classHV[i][dim] = classHV_gmem[i*Dhv + dim];
+					classHV[i * Dhv + dim] = classHV_gmem[i*Dhv + dim];
 				//For training, initialize to zero.
 				else
-					classHV[i][dim] = 0;
+					classHV[i * Dhv + dim] = 0;
 			}
 		}
 		
@@ -156,7 +156,7 @@ void searchUnitFirstEpoch(int enc_stream[Dhv], int *classHV_gmem, int *labels_gm
 			uint64_t total = 0;
 			loop_norm_2:
 			for (int dim = 0; dim < Dhv; dim++) {
-				total += classHV[i_class][dim] * classHV[i_class][dim];
+				total += classHV[i_class * Dhv + dim] * classHV[i_class * Dhv + dim];
 			}
 			//Total might be 0 before the first round of training, or if some class didn't have any sample,
 			//So we use 1/|C|_2 = 0 to make its similarity (H*C*1/|C|_2) score 0 (although similarity checking won't be actually used in the first round of training).
@@ -188,14 +188,14 @@ void searchUnitFirstEpoch(int enc_stream[Dhv], int *classHV_gmem, int *labels_gm
 		uint32_t temp_partial = encHV_full[i_dim];
 		loop_stream:
 		for (int j_sub = 0; j_sub < ROW; j_sub++) {
-			encHV_partial[j_sub] = enc_stream[j_sub + i_dim * Dhv / ROW];
+			encHV_partial[j_sub] = enc_stream[j_sub * Dhv / ROW + i_dim];
 		}
 		//In the first epoch of TRAINING, initialize the classes, and store the encoded hypervector.
 		if (train > 0) {
 			uint32_t temp_partial;
 			loop_init:
 			for (int j_sub = 0; j_sub < ROW; j_sub++) {
-				classHV[label][i_dim*ROW + j_sub] += encHV_partial[j_sub];
+				classHV[label * Dhv + i_dim*ROW + j_sub] += encHV_partial[j_sub];
 				//store the dimensions (in a whole hypervector) and save to global memory for reuse in next epochs.
 				//temp_partial[j_sub] = encHV_partial[j_sub] == 1 ? 1 : 0; //Bipolar to binary conversion.
 				if (encHV_partial[j_sub] == 1) {
@@ -215,7 +215,7 @@ void searchUnitFirstEpoch(int enc_stream[Dhv], int *classHV_gmem, int *labels_gm
 				for (int k_sub = 0; k_sub < ROW; k_sub++) {
 					//#pragma HLS UNROLL factor=ROW
 					//i_dim keeps track of the global index of classes (increases by ROW after processing a block of ROW rows).
-					dotProductRes[j_class] += encHV_partial[k_sub] * classHV[j_class][i_dim*ROW + k_sub];
+					dotProductRes[j_class] += encHV_partial[k_sub] * classHV[j_class * Dhv + i_dim*ROW + k_sub];
 				}
 			}
 		}
@@ -258,7 +258,7 @@ void searchUnitFirstEpoch(int enc_stream[Dhv], int *classHV_gmem, int *labels_gm
 		loop_writeClasses:
 		for (int i = 0; i < N_CLASS; i++) {
 			for (int j = 0; j < Dhv; j++) {
-				classHV_gmem[i*Dhv + j] = classHV[i][j];
+				classHV_gmem[i*Dhv + j] = classHV[i * Dhv + j];
 			}
 		}
 		trainScore[0] = 0;
@@ -266,7 +266,7 @@ void searchUnitFirstEpoch(int enc_stream[Dhv], int *classHV_gmem, int *labels_gm
 
 }
 
-void searchUnitRestEpochs(int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size, int encHV_partial[ROW], int dotProductRes[N_CLASS], float norm2_inv[N_CLASS], uint32_t encHV_full[Dhv/ROW], int classHV[N_CLASS][Dhv]) {
+void searchUnitRestEpochs(int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size, int encHV_partial[ROW], int dotProductRes[N_CLASS], float norm2_inv[N_CLASS], uint32_t encHV_full[Dhv/ROW], int classHV[N_CLASS * Dhv]) {
 	int EPOCH = (train == 0) ? 1 : train;
 	int correct = -1;
 	loop_repeat:
@@ -281,7 +281,7 @@ void searchUnitRestEpochs(int *classHV_gmem, int *labels_gmem, HyperVector512 *e
 			uint64_t total = 0;
 			loop_norm_2:
 			for (int dim = 0; dim < Dhv; dim++) {
-				total += classHV[i_class][dim] * classHV[i_class][dim];
+				total += classHV[i_class * Dhv + dim] * classHV[i_class * Dhv + dim];
 			}
 			//Total might be 0 before the first round of training, or if some class didn't have any sample,
 			//So we use 1/|C|_2 = 0 to make its similarity (H*C*1/|C|_2) score 0 (although similarity checking won't be actually used in the first round of training).
@@ -334,7 +334,7 @@ void searchUnitRestEpochs(int *classHV_gmem, int *labels_gmem, HyperVector512 *e
 					loop_inner:
 					for (int k_sub = 0; k_sub < ROW; k_sub++) {
 						//i_dim keeps track of the global index of classes (increases by ROW after processing a block of ROW rows).
-						dotProductRes[j_class] += encHV_partial[k_sub] * classHV[j_class][i_dim*ROW + k_sub];
+						dotProductRes[j_class] += encHV_partial[k_sub] * classHV[j_class * Dhv + i_dim*ROW + k_sub];
 					}
 				}
 			}
@@ -366,8 +366,8 @@ void searchUnitRestEpochs(int *classHV_gmem, int *labels_gmem, HyperVector512 *e
 					for (int j = 0; j < ROW; j++) {
 						//int temp_dim = temp_partial[j] == 1 ? 1 : -1;
 						int temp_dim = temp_partial & (1 << j) ? 1 : -1;
-						classHV[label][i_sub*ROW + j] += temp_dim;
-						classHV[maxIndex][i_sub*ROW + j] -= temp_dim;
+						classHV[label * Dhv + i_sub*ROW + j] += temp_dim;
+						classHV[maxIndex * Dhv + i_sub*ROW + j] -= temp_dim;
 					}
 				}
 			}
@@ -384,7 +384,7 @@ void searchUnitRestEpochs(int *classHV_gmem, int *labels_gmem, HyperVector512 *e
 		loop_writeClasses:
 		for (int i = 0; i < N_CLASS; i++) {
 			for (int j = 0; j < Dhv; j++) {
-				classHV_gmem[i*Dhv + j] = classHV[i][j];
+				classHV_gmem[i*Dhv + j] = classHV[i * Dhv + j];
 			}
 		}
 		trainScore[0] = correct;
@@ -437,7 +437,7 @@ void top(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t
 	//As a result of using 2-d array, there will be some annoying temp variables to read/write data from/to encHV_full within the code.
 	uint32_t encHV_full[Dhv/ROW];
 
-	int classHV[N_CLASS][Dhv];
+	int classHV[N_CLASS * Dhv];
 	//We partition each class dimensions into ROW elements to match the ROW generated dimensions.
 
 	for (int iter_read = 0; iter_read < size; iter_read++) {
