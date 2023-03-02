@@ -156,7 +156,7 @@ int main(int argc, char** argv)
 		buf_encHV, buf_encHV_size,
 		buf_trainScore, buf_trainScore_size,
 		train,
-		N_SAMPLE,
+		N_TEST,
 		6,
 		buf_input2, buf_input2_size,
 		buf_ID, buf_ID_size,
@@ -174,7 +174,7 @@ int main(int argc, char** argv)
 	   buf_encHV, buf_encHV_size,
 	   buf_trainScore, buf_trainScore_size,
 	   train,
-	   N_SAMPLE);
+	   N_TEST);
 #endif
     	t_elapsed = chrono::high_resolution_clock::now() - t_start;
 

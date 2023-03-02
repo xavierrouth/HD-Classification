@@ -24,4 +24,4 @@ host-hetero: build/host-hetero.ll
 .PHONY: clean
 
 clean:
-	rm -rf host-normal host-hetero build/*.o build/*.ll build/*.tmp build/*.cl *.temp
+	rm -rf host-normal host-hetero build/*.o build/*.ll build/*.tmp build/*.cl *.temp *.aoco
