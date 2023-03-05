@@ -6,6 +6,12 @@
 
 using namespace std;
 
+#define DUMP(vec, suffix) {\
+  FILE *f = fopen("dump/" #vec suffix, "w");\
+  if (f) fwrite(vec.data(), sizeof(vec[0]), vec.size(), f);\
+  if (f) fclose(f);\
+}
+
 void datasetBinaryRead(vector<int> &data, string path){
 	ifstream file_(path, ios::in | ios::binary);
 	assert(file_.is_open() && "Couldn't open file!");
@@ -75,6 +81,13 @@ int main(int argc, char** argv)
 	auto buf_trainScore_size = trainScore.size() * sizeof(*buf_trainScore);
 	cout << "Training with " << N_SAMPLE << " samples." << endl;
 
+	DUMP(input_gmem, "_input_train");
+	DUMP(ID_gmem, "_input_train");
+	DUMP(classHV_gmem, "_input_train");
+	DUMP(labels_gmem, "_input_train");
+	DUMP(encHV_gmem, "_input_train");
+	DUMP(trainScore, "_input_train");
+
 	t_start = chrono::high_resolution_clock::now();
 #ifdef HPVM
 	void *HDTrainDFG = __hetero_launch(
@@ -108,6 +121,13 @@ int main(int argc, char** argv)
 	   N_SAMPLE);
 #endif
 	t_elapsed = chrono::high_resolution_clock::now() - t_start;
+
+	DUMP(input_gmem, "_output_train");
+	DUMP(ID_gmem, "_output_train");
+	DUMP(classHV_gmem, "_output_train");
+	DUMP(labels_gmem, "_output_train");
+	DUMP(encHV_gmem, "_output_train");
+	DUMP(trainScore, "_output_train");
 	
 	mSec = chrono::duration_cast<chrono::milliseconds>(t_elapsed).count();
 	//cout << "Reading train data took " << mSec_train << " mSec" << endl;
@@ -144,6 +164,13 @@ int main(int argc, char** argv)
 	auto buf_input2_size = input_gmem.size() * sizeof(*buf_input2);
 	auto buf_labels2_size = labels_gmem.size() * sizeof(*buf_labels2);
 
+	DUMP(input_gmem, "_input_test");
+	DUMP(ID_gmem, "_input_test");
+	DUMP(classHV_gmem, "_input_test");
+	DUMP(labels_gmem, "_input_test");
+	DUMP(encHV_gmem, "_input_test");
+	DUMP(trainScore, "_input_test");
+
 	t_start = chrono::high_resolution_clock::now();
 #ifdef HPVM
 	void *HDTestDFG = __hetero_launch(
@@ -177,6 +204,13 @@ int main(int argc, char** argv)
 	   N_TEST);
 #endif
     	t_elapsed = chrono::high_resolution_clock::now() - t_start;
+
+	DUMP(input_gmem, "_output_test");
+	DUMP(ID_gmem, "_output_test");
+	DUMP(classHV_gmem, "_output_test");
+	DUMP(labels_gmem, "_output_test");
+	DUMP(encHV_gmem, "_output_test");
+	DUMP(trainScore, "_output_test");
 
     	mSec = chrono::duration_cast<chrono::milliseconds>(t_elapsed).count();
     	//cout << "Reading test data took " << mSec_test << " mSec" << endl;
