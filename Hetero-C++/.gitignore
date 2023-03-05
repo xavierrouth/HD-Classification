@@ -3,3 +3,4 @@ host-cpu
 host-fpga
 *.aoco
 *.temp
+dump*
