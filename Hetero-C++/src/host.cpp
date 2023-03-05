@@ -59,7 +59,6 @@ int main(int argc, char** argv)
 		//ID_gmem[i] = int(rand());
 	}
 	vector<int, aligned_allocator<int>> classHV_gmem(N_CLASS*Dhv);	
-	vector<int, aligned_allocator<int>> trainScore(1);
 	
 	vector<HyperVector512, aligned_allocator<HyperVector512>> encHV_gmem((Dhv/32)*N_SAMPLE*sizeof(HyperVector512)/sizeof(int));
 
@@ -72,13 +71,11 @@ int main(int argc, char** argv)
 	auto buf_classHV = classHV_gmem.data();
 	auto buf_labels = labels_gmem.data();
 	auto buf_encHV = encHV_gmem.data();
-	auto buf_trainScore = trainScore.data();
 	auto buf_input_size = input_gmem.size() * sizeof(*buf_input);
 	auto buf_ID_size = ID_gmem.size() * sizeof(*buf_ID);
 	auto buf_classHV_size = classHV_gmem.size() * sizeof(*buf_classHV);
 	auto buf_labels_size = labels_gmem.size() * sizeof(*buf_labels);
 	auto buf_encHV_size = encHV_gmem.size() * sizeof(*buf_encHV);
-	auto buf_trainScore_size = trainScore.size() * sizeof(*buf_trainScore);
 	cout << "Training with " << N_SAMPLE << " samples." << endl;
 
 	DUMP(input_gmem, "_input_train");
@@ -86,28 +83,25 @@ int main(int argc, char** argv)
 	DUMP(classHV_gmem, "_input_train");
 	DUMP(labels_gmem, "_input_train");
 	DUMP(encHV_gmem, "_input_train");
-	DUMP(trainScore, "_input_train");
 
 	t_start = chrono::high_resolution_clock::now();
 #ifdef HPVM
 	void *HDTrainDFG = __hetero_launch(
 		(void *) hd,
-		8, 
+		7, 
 		buf_input, buf_input_size,
 		buf_ID, buf_ID_size,
 		buf_classHV, buf_classHV_size,
 		buf_labels, buf_labels_size,
 		buf_encHV, buf_encHV_size,
-		buf_trainScore, buf_trainScore_size,
 		train,
 		N_SAMPLE,
-		6,
+		5,
 		buf_input, buf_input_size,
 		buf_ID, buf_ID_size,
 		buf_classHV, buf_classHV_size,
 		buf_labels, buf_labels_size,
-		buf_encHV, buf_encHV_size,
-		buf_trainScore, buf_trainScore_size
+		buf_encHV, buf_encHV_size
 	);
 	__hetero_wait(HDTrainDFG);
 #else
@@ -116,7 +110,6 @@ int main(int argc, char** argv)
 	   buf_classHV, buf_classHV_size,
 	   buf_labels, buf_labels_size,
 	   buf_encHV, buf_encHV_size,
-	   buf_trainScore, buf_trainScore_size,
 	   train,
 	   N_SAMPLE);
 #endif
@@ -127,7 +120,6 @@ int main(int argc, char** argv)
 	DUMP(classHV_gmem, "_output_train");
 	DUMP(labels_gmem, "_output_train");
 	DUMP(encHV_gmem, "_output_train");
-	DUMP(trainScore, "_output_train");
 	
 	mSec = chrono::duration_cast<chrono::milliseconds>(t_elapsed).count();
 	//cout << "Reading train data took " << mSec_train << " mSec" << endl;
@@ -136,8 +128,6 @@ int main(int argc, char** argv)
 	/*for(int i = 0; i < N_CLASS; i++){
 		cout << classHV_gmem[i*Dhv] << "\t" << classHV_gmem[i*Dhv + Dhv - 1] << endl;
 	}*/
-	cout << "Train accuracy = " << float(trainScore[0])/N_SAMPLE << endl << endl;
-	
 	t_start = chrono::high_resolution_clock::now();
 	vector<int> X_test;
 	vector<int> y_test;
@@ -169,28 +159,25 @@ int main(int argc, char** argv)
 	DUMP(classHV_gmem, "_input_test");
 	DUMP(labels_gmem, "_input_test");
 	DUMP(encHV_gmem, "_input_test");
-	DUMP(trainScore, "_input_test");
 
 	t_start = chrono::high_resolution_clock::now();
 #ifdef HPVM
 	void *HDTestDFG = __hetero_launch(
 		(void *) hd,
-		8, 
+		7, 
 		buf_input2, buf_input2_size,
 		buf_ID, buf_ID_size,
 		buf_classHV, buf_classHV_size,
 		buf_labels2, buf_labels2_size,
 		buf_encHV, buf_encHV_size,
-		buf_trainScore, buf_trainScore_size,
 		train,
 		N_TEST,
-		6,
+		5,
 		buf_input2, buf_input2_size,
 		buf_ID, buf_ID_size,
 		buf_classHV, buf_classHV_size,
 		buf_labels2, buf_labels2_size,
-		buf_encHV, buf_encHV_size,
-		buf_trainScore, buf_trainScore_size
+		buf_encHV, buf_encHV_size
 	);
 	__hetero_wait(HDTestDFG);
 #else
@@ -199,7 +186,6 @@ int main(int argc, char** argv)
 	   buf_classHV, buf_classHV_size,
 	   buf_labels2, buf_labels2_size,
 	   buf_encHV, buf_encHV_size,
-	   buf_trainScore, buf_trainScore_size,
 	   train,
 	   N_TEST);
 #endif
@@ -210,7 +196,6 @@ int main(int argc, char** argv)
 	DUMP(classHV_gmem, "_output_test");
 	DUMP(labels_gmem, "_output_test");
 	DUMP(encHV_gmem, "_output_test");
-	DUMP(trainScore, "_output_test");
 
     	mSec = chrono::duration_cast<chrono::milliseconds>(t_elapsed).count();
     	//cout << "Reading test data took " << mSec_test << " mSec" << endl;

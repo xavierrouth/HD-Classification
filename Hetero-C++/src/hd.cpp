@@ -128,14 +128,13 @@ void encodeUnit(int feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], int enc_st
  * classHV_gmem (input/output): class hypervectors; output in case of training, and input in case of inference.
  * labels_gmem (input/output): label of data samples; input in case of training, and output in case of inference.
  * encHV_gmem (input/output): interface to write/read encoded hypervectors to/from the DRAM to reuse encoded data.
- * trainScore (output): number of correct predictions in the last epoch of training.
  * train (input): number of training epochs (0 = inference)
  * size (input): number of data samples.
  *
  * searchUnitFirstEpoch runs searchUnit for the first epoch, searchUnitRestEpochs runs searchUnit for the rest of the epochs.
  * These are kept separate because of how searchUnit reads from the FIFOs.
  */
-void searchUnitFirstEpoch(int enc_stream[Dhv], int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size, int iter_read, int encHV_partial[ROW], int dotProductRes[N_CLASS], float norm2_inv[N_CLASS], uint32_t encHV_full[Dhv/ROW]) {
+void searchUnitFirstEpoch(int enc_stream[Dhv], int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int train, int size, int iter_read, int encHV_partial[ROW], int dotProductRes[N_CLASS], float norm2_inv[N_CLASS], uint32_t encHV_full[Dhv/ROW]) {
 	if (iter_read == 0) {
 		//Initialize the class hypervectors.
 		loop_initClass:
@@ -251,133 +250,104 @@ void searchUnitFirstEpoch(int enc_stream[Dhv], int *classHV_gmem, int *labels_gm
 		}
 	}
 
-	//At the end of retraining, write back the generated classes.
-	if (train > 0) {
-		trainScore[0] = 0;
-	}
-
 }
 
-void searchUnitRestEpochs(int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int *trainScore, int train, int size, int encHV_partial[ROW], int dotProductRes[N_CLASS], float norm2_inv[N_CLASS], uint32_t encHV_full[Dhv/ROW]) {
-	int EPOCH = (train == 0) ? 1 : train;
-	int correct = -1;
-	loop_repeat:
-	for (int iter_epoch = 1; iter_epoch < EPOCH; iter_epoch++) {
+void searchUnitRestEpochs(int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int train, int size, int encHV_partial[ROW], int dotProductRes[N_CLASS], float norm2_inv[N_CLASS], uint32_t encHV_full[Dhv/ROW]) {
+	//At the beginning of each epoch, calculate 1/|C|_2 (we call "1/|C|_2" as norm2).
+	loop_norm_1:
+	for (int i_class = 0; i_class < N_CLASS; i_class++) {
+		uint64_t total = 0;
+		loop_norm_2:
+		for (int dim = 0; dim < Dhv; dim++) {
+			total += classHV_gmem[i_class * Dhv + dim] * classHV_gmem[i_class * Dhv + dim];
+		}
+		//Total might be 0 before the first round of training, or if some class didn't have any sample,
+		//So we use 1/|C|_2 = 0 to make its similarity (H*C*1/|C|_2) score 0 (although similarity checking won't be actually used in the first round of training).
+		if (total == 0)
+			norm2_inv[i_class] = 0;
+		else {
+			norm2_inv[i_class] = 1.0 / float(total);
+		}
+	}
 
-		//Count the number of correct prediction in training epochs.
-		correct = 0;
+	//cout << "norm2_inv[0]: " << norm2_inv[0] << endl;
 
-		//At the beginning of each epoch, calculate 1/|C|_2 (we call "1/|C|_2" as norm2).
-		loop_norm_1:
+	loop_inputs:
+	for (int iter_read = 0; iter_read < size; iter_read++) {
+
+		//For inference we do not need to read the label.
+		int label = labels_gmem[iter_read];
+
+		//Reset the dotProductRes (score buffer) before each input sample.
+		loop_clear:
 		for (int i_class = 0; i_class < N_CLASS; i_class++) {
-			uint64_t total = 0;
-			loop_norm_2:
-			for (int dim = 0; dim < Dhv; dim++) {
-				total += classHV_gmem[i_class * Dhv + dim] * classHV_gmem[i_class * Dhv + dim];
+			dotProductRes[i_class] = 0;
+		}
+		//In the subsequent training epochs (i.e., retraining), we just reuse the encoding hypervectors generated in the first epoch.
+		loop_read_encHV:
+		for (int i = 0; i < Dhv/512; i++) {
+			HyperVector512 enc_512b = encHV_gmem[iter_read*(Dhv/512) + i];
+			for (int j = 0; j < 512/ROW; j += 1) {
+				//encHV_full[(i*512/ROW) + j] = enc_512b.range(j*ROW+ROW-1, j*ROW);
+				encHV_full[(i*512/ROW) + j] = enc_512b.buf[j];
 			}
-			//Total might be 0 before the first round of training, or if some class didn't have any sample,
-			//So we use 1/|C|_2 = 0 to make its similarity (H*C*1/|C|_2) score 0 (although similarity checking won't be actually used in the first round of training).
-			if (total == 0)
-				norm2_inv[i_class] = 0;
-			else {
-				norm2_inv[i_class] = 1.0 / float(total);
+		}
+		//In the first EPOCH, will read Dhv encoding dimensions, ROW by ROW (ROW dimensions per Dhv/COL cycles).
+		//i_dim keeps track of the global index of classes (increases by ROW after processing a block of ROW rows).
+		loop_outer:
+		for (int i_dim = 0; i_dim < Dhv/ROW; i_dim += 1) {
+			uint32_t temp_partial = encHV_full[i_dim];
+			loop_stream:
+			for (int j_sub = 0; j_sub < ROW; j_sub++) {
+				encHV_partial[j_sub] = temp_partial & (1 << j_sub) ? 1 : -1; //Binary to bipolar conversion.
+			}
+			//In the first epoch of TRAINING, initialize the classes, and store the encoded hypervector.
+			//In the next training epochs and/or in inference, calculate the similarity scores.
+			//Multiply the generated ROW encoding dimensions to the corresponding class hypervectors.
+			loop_score:
+			for (int j_class = 0; j_class < N_CLASS; j_class++) {
+				loop_inner:
+				for (int k_sub = 0; k_sub < ROW; k_sub++) {
+					//i_dim keeps track of the global index of classes (increases by ROW after processing a block of ROW rows).
+					dotProductRes[j_class] += encHV_partial[k_sub] * classHV_gmem[j_class * Dhv + i_dim*ROW + k_sub];
+				}
+			}
+		}
+		//Calculate max index (needed in inference and REtraining iterations, but we do it in case of initial training too, to avoid if/else...).
+		int maxIndex = -1;
+		float maxVal = -(1 << 15);
+		loop_max:
+		for (int i_class = 0; i_class < N_CLASS; i_class++) {
+			//Here is the tricky part; I replace H*C/sqrt(|C|_2) by (H*C)^2/|C|_2, while considering the sign of H*C.
+			float temp = dotProductRes[i_class]*norm2_inv[i_class];
+			float score = temp * dotProductRes[i_class];
+			if (dotProductRes[i_class] < 0)
+				score = -score;
+			if (score > maxVal) {
+				maxIndex = i_class;
+				maxVal = score;
 			}
 		}
 
-		//cout << "norm2_inv[0]: " << norm2_inv[0] << endl;
-
-		int label;
-
-		loop_inputs:
-		for (int iter_read = 0; iter_read < size; iter_read++) {
-
-			//For inference we do not need to read the label.
-			if (train > 0)
-				label = labels_gmem[iter_read];
-
-			//Reset the dotProductRes (score buffer) before each input sample.
-			loop_clear:
-			for (int i_class = 0; i_class < N_CLASS; i_class++) {
-				dotProductRes[i_class] = 0;
-			}
-			//In the subsequent training epochs (i.e., retraining), we just reuse the encoding hypervectors generated in the first epoch.
-			loop_read_encHV:
-			for (int i = 0; i < Dhv/512; i++) {
-				HyperVector512 enc_512b = encHV_gmem[iter_read*(Dhv/512) + i];
-				for (int j = 0; j < 512/ROW; j += 1) {
-					//encHV_full[(i*512/ROW) + j] = enc_512b.range(j*ROW+ROW-1, j*ROW);
-					encHV_full[(i*512/ROW) + j] = enc_512b.buf[j];
+		//If it is a REtraining epoch, update the correct and mispredicted class.
+		if (maxIndex != label) {
+			loop_update:
+			for (int i_sub = 0; i_sub < Dhv/ROW; i_sub++) {
+				uint32_t temp_partial = encHV_full[i_sub];
+				for (int j = 0; j < ROW; j++) {
+					//int temp_dim = temp_partial[j] == 1 ? 1 : -1;
+					int temp_dim = temp_partial & (1 << j) ? 1 : -1;
+					classHV_gmem[label * Dhv + i_sub*ROW + j] += temp_dim;
+					classHV_gmem[maxIndex * Dhv + i_sub*ROW + j] -= temp_dim;
+					//classHV_gmem[label * Dhv + i_sub*ROW + j] = 42;
+					//classHV_gmem[maxIndex * Dhv + i_sub*ROW + j] = 24;
 				}
 			}
-			//In the first EPOCH, will read Dhv encoding dimensions, ROW by ROW (ROW dimensions per Dhv/COL cycles).
-			//i_dim keeps track of the global index of classes (increases by ROW after processing a block of ROW rows).
-			loop_outer:
-			for (int i_dim = 0; i_dim < Dhv/ROW; i_dim += 1) {
-				uint32_t temp_partial = encHV_full[i_dim];
-				loop_stream:
-				for (int j_sub = 0; j_sub < ROW; j_sub++) {
-					encHV_partial[j_sub] = temp_partial & (1 << j_sub) ? 1 : -1; //Binary to bipolar conversion.
-				}
-				//In the first epoch of TRAINING, initialize the classes, and store the encoded hypervector.
-				//In the next training epochs and/or in inference, calculate the similarity scores.
-				//Multiply the generated ROW encoding dimensions to the corresponding class hypervectors.
-				loop_score:
-				for (int j_class = 0; j_class < N_CLASS; j_class++) {
-					loop_inner:
-					for (int k_sub = 0; k_sub < ROW; k_sub++) {
-						//i_dim keeps track of the global index of classes (increases by ROW after processing a block of ROW rows).
-						dotProductRes[j_class] += encHV_partial[k_sub] * classHV_gmem[j_class * Dhv + i_dim*ROW + k_sub];
-					}
-				}
-			}
-			//Calculate max index (needed in inference and REtraining iterations, but we do it in case of initial training too, to avoid if/else...).
-			int maxIndex = -1;
-			float maxVal = -(1 << 15);
-			loop_max:
-			for (int i_class = 0; i_class < N_CLASS; i_class++) {
-				//Here is the tricky part; I replace H*C/sqrt(|C|_2) by (H*C)^2/|C|_2, while considering the sign of H*C.
-				float temp = dotProductRes[i_class]*norm2_inv[i_class];
-				float score = temp * dotProductRes[i_class];
-				if (dotProductRes[i_class] < 0)
-					score = -score;
-				if (score > maxVal) {
-					maxIndex = i_class;
-					maxVal = score;
-				}
-			}
-
-			//If inference, output the index (label) of the class with maximum similarity score.
-			if (train == 0) {
-				labels_gmem[iter_read] = maxIndex;
-			}
-			//If it is a REtraining epoch, update the correct and mispredicted class.
-			if (maxIndex != label) {
-				loop_update:
-				for (int i_sub = 0; i_sub < Dhv/ROW; i_sub++) {
-					uint32_t temp_partial = encHV_full[i_sub];
-					for (int j = 0; j < ROW; j++) {
-						//int temp_dim = temp_partial[j] == 1 ? 1 : -1;
-						int temp_dim = temp_partial & (1 << j) ? 1 : -1;
-						classHV_gmem[label * Dhv + i_sub*ROW + j] += temp_dim;
-						classHV_gmem[maxIndex * Dhv + i_sub*ROW + j] -= temp_dim;
-					}
-				}
-			}
-			else {
-				correct += 1;
-			}
-		}
-		//An epoch finishes here.
-		//if (train > 0)
-			//cout << "Training epoch " << iter_epoch << " accuracy: " << float(correct)/size << endl;
-	}
-	//At the end of retraining, write back the generated classes.
-	if (train > 0) {
-		trainScore[0] = correct;
+		}	
 	}
 }
 
-void top(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t ID_gmem_size, int *classHV_gmem, std::size_t classHV_gmem_size, int *labels_gmem, std::size_t labels_gmem_size, HyperVector512 *encHV_gmem, std::size_t encHV_gmem_size, int *trainScore, std::size_t trainScore_size, int train, int size) {
+void top(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t ID_gmem_size, int *classHV_gmem, std::size_t classHV_gmem_size, int *labels_gmem, std::size_t labels_gmem_size, HyperVector512 *encHV_gmem, std::size_t encHV_gmem_size, int train, int size) {
 	int feature_stream[N_FEAT_PAD];
 
 	//For now, the encoding stream is integer while we are using bipolar (+1, -1) encoding. Fix it later.
@@ -428,9 +398,11 @@ void top(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t
 	for (int iter_read = 0; iter_read < size; iter_read++) {
 		inputStream(input_gmem, feature_stream, size, iter_read);
 		encodeUnit(feature_stream, ID, enc_stream, size, iter_read);
-		searchUnitFirstEpoch(enc_stream, classHV_gmem, labels_gmem, encHV_gmem, trainScore, train, size, iter_read, encHV_partial, dotProductRes, norm2_inv, encHV_full);
+		searchUnitFirstEpoch(enc_stream, classHV_gmem, labels_gmem, encHV_gmem, train, size, iter_read, encHV_partial, dotProductRes, norm2_inv, encHV_full);
 	}
-	searchUnitRestEpochs(classHV_gmem, labels_gmem, encHV_gmem, trainScore, train, size, encHV_partial, dotProductRes, norm2_inv, encHV_full);
+	for (int epoch = 1; epoch < train; ++epoch) {
+		searchUnitRestEpochs(classHV_gmem, labels_gmem, encHV_gmem, train, size, encHV_partial, dotProductRes, norm2_inv, encHV_full);
+	}
 }
 
 /*
@@ -439,55 +411,50 @@ void top(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t
  * classHV_gmem (input/output): class hypervectors; output in case of training, and input in case of inference.
  * labels_gmem (input/output): label of data samples; input in case of training, and output in case of inference.
  * encHV_gmem (input/output): interface to write/read encoded hypervectors to/from the DRAM to reuse encoded data.
- * trainScore (output): number of correct predictions in the last epoch of training.
  * train (input): number of training epochs (0 = inference)
  * size (input): number of data samples.
  */
-void hd(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t ID_gmem_size, int *classHV_gmem, std::size_t classHV_gmem_size, int *labels_gmem, std::size_t labels_gmem_size, HyperVector512 *encHV_gmem, std::size_t encHV_gmem_size, int *trainScore, std::size_t trainScore_size, int train, int size) {
+void hd(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t ID_gmem_size, int *classHV_gmem, std::size_t classHV_gmem_size, int *labels_gmem, std::size_t labels_gmem_size, HyperVector512 *encHV_gmem, std::size_t encHV_gmem_size, int train, int size) {
 #ifdef HPVM
 	void *hd_Section = __hetero_section_begin();
 	void *hd_Wrapper = __hetero_task_begin(
-					/* Num Input Pairs */ 8,
+					/* Num Input Pairs */ 7,
 					input_gmem, input_gmem_size, 
 					ID_gmem, ID_gmem_size, 					
 					classHV_gmem, classHV_gmem_size,
 					labels_gmem, labels_gmem_size,
 					encHV_gmem, encHV_gmem_size,
-					trainScore, trainScore_size,
 					train,
 					size,
-					/* Num Output Pairs */ 6,
+					/* Num Output Pairs */ 5,
 					input_gmem, input_gmem_size, 
 					ID_gmem, ID_gmem_size, 					
 					classHV_gmem, classHV_gmem_size,
 					labels_gmem, labels_gmem_size,
 					encHV_gmem, encHV_gmem_size,
-					trainScore, trainScore_size,
 					/* Optional Node Name */ "hd_task");
 
 	void *top_Section = __hetero_section_begin();
 	void *top_Wrapper = __hetero_task_begin(
-					/* Num Input Pairs */ 8,
+					/* Num Input Pairs */ 7,
 					input_gmem, input_gmem_size, 
 					ID_gmem, ID_gmem_size, 					
 					classHV_gmem, classHV_gmem_size,
 					labels_gmem, labels_gmem_size,
 					encHV_gmem, encHV_gmem_size,
-					trainScore, trainScore_size,
 					train,
 					size,
-					/* Num Output Pairs */ 6,
+					/* Num Output Pairs */ 5,
 					input_gmem, input_gmem_size, 
 					ID_gmem, ID_gmem_size, 					
 					classHV_gmem, classHV_gmem_size,
 					labels_gmem, labels_gmem_size,
 					encHV_gmem, encHV_gmem_size,
-					trainScore, trainScore_size,
 					/* Optional Node Name */ "top_task");
 	__hpvm__hint(DEVICE);
 #endif
 
-	top(input_gmem, input_gmem_size, ID_gmem, ID_gmem_size, classHV_gmem, classHV_gmem_size, labels_gmem, labels_gmem_size, encHV_gmem, encHV_gmem_size, trainScore, trainScore_size, train, size);
+	top(input_gmem, input_gmem_size, ID_gmem, ID_gmem_size, classHV_gmem, classHV_gmem_size, labels_gmem, labels_gmem_size, encHV_gmem, encHV_gmem_size, train, size);
 
 #ifdef HPVM
 	__hetero_task_end(top_Wrapper);
