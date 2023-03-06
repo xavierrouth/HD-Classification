@@ -10,7 +10,7 @@
  * feature_stream (output): N_FEAT_PAD parallel streams to stream the data to the next module.
  * size (input): number of data sampels.
  */
-void inputStream(int *input_gmem, int feature_stream[N_FEAT_PAD], int size, int iter_read) {
+void inputStream(int *__restrict input_gmem, int feature_stream[N_FEAT_PAD], int size, int iter_read) {
 
 	 //Need to move the pointer by intPerInput after each input
 	int offset = iter_read * N_FEAT;
@@ -36,7 +36,7 @@ void inputStream(int *input_gmem, int feature_stream[N_FEAT_PAD], int size, int 
  * size (input): number of data samples.
  *
  */
-void encodeUnit(int feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], int enc_stream[Dhv], int size, int iter_read) {
+void encodeUnit(int *__restrict feature_stream, uint32_t *__restrict ID, int *__restrict enc_stream, int size, int iter_read) {
 
 	//Operate on ROW encoding dimension per cycle
 	int encHV_partial[ROW];
@@ -134,7 +134,7 @@ void encodeUnit(int feature_stream[N_FEAT_PAD], uint32_t ID[Dhv/ROW], int enc_st
  * searchUnitFirstEpoch runs searchUnit for the first epoch, searchUnitRestEpochs runs searchUnit for the rest of the epochs.
  * These are kept separate because of how searchUnit reads from the FIFOs.
  */
-void searchUnitFirstEpoch(int enc_stream[Dhv], int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int train, int size, int iter_read, int encHV_partial[ROW], int dotProductRes[N_CLASS], float norm2_inv[N_CLASS], uint32_t encHV_full[Dhv/ROW]) {
+void searchUnitFirstEpoch(int *__restrict enc_stream, int *__restrict classHV_gmem, int *__restrict labels_gmem, HyperVector512 *__restrict encHV_gmem, int train, int size, int iter_read, int *__restrict encHV_partial, int *__restrict dotProductRes, float *__restrict norm2_inv, uint32_t *__restrict encHV_full) {
 	if (iter_read == 0) {
 		//Initialize the class hypervectors.
 		loop_initClass:
@@ -252,7 +252,7 @@ void searchUnitFirstEpoch(int enc_stream[Dhv], int *classHV_gmem, int *labels_gm
 
 }
 
-void searchUnitRestEpochs(int *classHV_gmem, int *labels_gmem, HyperVector512 *encHV_gmem, int train, int size, int encHV_partial[ROW], int dotProductRes[N_CLASS], float norm2_inv[N_CLASS], uint32_t encHV_full[Dhv/ROW]) {
+void searchUnitRestEpochs(int *__restrict classHV_gmem, int *__restrict labels_gmem, HyperVector512 *__restrict encHV_gmem, int train, int size, int *__restrict encHV_partial, int *__restrict dotProductRes, float *__restrict norm2_inv, uint32_t *__restrict encHV_full) {
 	//At the beginning of each epoch, calculate 1/|C|_2 (we call "1/|C|_2" as norm2).
 	loop_norm_1:
 	for (int i_class = 0; i_class < N_CLASS; i_class++) {
@@ -347,7 +347,7 @@ void searchUnitRestEpochs(int *classHV_gmem, int *labels_gmem, HyperVector512 *e
 	}
 }
 
-void top(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t ID_gmem_size, int *classHV_gmem, std::size_t classHV_gmem_size, int *labels_gmem, std::size_t labels_gmem_size, HyperVector512 *encHV_gmem, std::size_t encHV_gmem_size, int train, int size) {
+void top(int *__restrict input_gmem, std::size_t input_gmem_size, int *__restrict ID_gmem, std::size_t ID_gmem_size, int *__restrict classHV_gmem, std::size_t classHV_gmem_size, int *__restrict labels_gmem, std::size_t labels_gmem_size, HyperVector512 *__restrict encHV_gmem, std::size_t encHV_gmem_size, int train, int size) {
 	int feature_stream[N_FEAT_PAD];
 
 	//For now, the encoding stream is integer while we are using bipolar (+1, -1) encoding. Fix it later.
@@ -414,7 +414,7 @@ void top(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t
  * train (input): number of training epochs (0 = inference)
  * size (input): number of data samples.
  */
-void hd(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t ID_gmem_size, int *classHV_gmem, std::size_t classHV_gmem_size, int *labels_gmem, std::size_t labels_gmem_size, HyperVector512 *encHV_gmem, std::size_t encHV_gmem_size, int train, int size) {
+void hd(int *__restrict input_gmem, std::size_t input_gmem_size, int *__restrict ID_gmem, std::size_t ID_gmem_size, int *__restrict classHV_gmem, std::size_t classHV_gmem_size, int *__restrict labels_gmem, std::size_t labels_gmem_size, HyperVector512 *__restrict encHV_gmem, std::size_t encHV_gmem_size, int train, int size) {
 #ifdef HPVM
 	void *hd_Section = __hetero_section_begin();
 	void *hd_Wrapper = __hetero_task_begin(

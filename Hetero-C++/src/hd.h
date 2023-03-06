@@ -25,4 +25,4 @@ struct HyperVector512 {
 	uint32_t buf[512 / 32];
 };
 
-void hd(int *input_gmem, std::size_t input_gmem_size, int *ID_gmem, std::size_t ID_gmem_size, int *classHV_gmem, std::size_t classHV_gmem_size, int *labels_gmem, std::size_t labels_gmem_size, HyperVector512 *encHV_gmem, std::size_t encHV_gmem_size, int train, int size);
+void hd(int *__restrict input_gmem, std::size_t input_gmem_size, int *__restrict ID_gmem, std::size_t ID_gmem_size, int *__restrict classHV_gmem, std::size_t classHV_gmem_size, int *__restrict labels_gmem, std::size_t labels_gmem_size, HyperVector512 *__restrict encHV_gmem, std::size_t encHV_gmem_size, int train, int size);
