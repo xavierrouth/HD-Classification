@@ -10,9 +10,7 @@
  * feature_stream (output): N_FEAT_PAD parallel streams to stream the data to the next module.
  * size (input): number of data sampels.
  */
-void inputStream(int *__restrict input_gmem, int feature_stream[N_FEAT_PAD], int size, int iter_read) {
-
-	 //Need to move the pointer by intPerInput after each input
+void inputStream(int *__restrict input_gmem, int *__restrict feature_stream, int size, int iter_read) {
 	int offset = iter_read * N_FEAT;
 	loop_features:
 	for (int i = 0; i < N_FEAT; i++) {
@@ -416,9 +414,27 @@ void top(int *__restrict input_gmem, std::size_t input_gmem_size, int *__restric
  */
 void hd(int *__restrict input_gmem, std::size_t input_gmem_size, int *__restrict ID_gmem, std::size_t ID_gmem_size, int *__restrict classHV_gmem, std::size_t classHV_gmem_size, int *__restrict labels_gmem, std::size_t labels_gmem_size, HyperVector512 *__restrict encHV_gmem, std::size_t encHV_gmem_size, int train, int size) {
 #ifdef HPVM
+	void *root_Section = __hetero_section_begin();
+	void *root_Wrapper = __hetero_task_begin(
+					7,
+					input_gmem, input_gmem_size, 
+					ID_gmem, ID_gmem_size, 					
+					classHV_gmem, classHV_gmem_size,
+					labels_gmem, labels_gmem_size,
+					encHV_gmem, encHV_gmem_size,
+					train,
+					size,
+					5,
+					input_gmem, input_gmem_size, 
+					ID_gmem, ID_gmem_size, 					
+					classHV_gmem, classHV_gmem_size,
+					labels_gmem, labels_gmem_size,
+					encHV_gmem, encHV_gmem_size,
+					"root_task");
+
 	void *hd_Section = __hetero_section_begin();
 	void *hd_Wrapper = __hetero_task_begin(
-					/* Num Input Pairs */ 7,
+					7,
 					input_gmem, input_gmem_size, 
 					ID_gmem, ID_gmem_size, 					
 					classHV_gmem, classHV_gmem_size,
@@ -426,41 +442,23 @@ void hd(int *__restrict input_gmem, std::size_t input_gmem_size, int *__restrict
 					encHV_gmem, encHV_gmem_size,
 					train,
 					size,
-					/* Num Output Pairs */ 5,
+					5,
 					input_gmem, input_gmem_size, 
 					ID_gmem, ID_gmem_size, 					
 					classHV_gmem, classHV_gmem_size,
 					labels_gmem, labels_gmem_size,
 					encHV_gmem, encHV_gmem_size,
-					/* Optional Node Name */ "hd_task");
-
-	void *top_Section = __hetero_section_begin();
-	void *top_Wrapper = __hetero_task_begin(
-					/* Num Input Pairs */ 7,
-					input_gmem, input_gmem_size, 
-					ID_gmem, ID_gmem_size, 					
-					classHV_gmem, classHV_gmem_size,
-					labels_gmem, labels_gmem_size,
-					encHV_gmem, encHV_gmem_size,
-					train,
-					size,
-					/* Num Output Pairs */ 5,
-					input_gmem, input_gmem_size, 
-					ID_gmem, ID_gmem_size, 					
-					classHV_gmem, classHV_gmem_size,
-					labels_gmem, labels_gmem_size,
-					encHV_gmem, encHV_gmem_size,
-					/* Optional Node Name */ "top_task");
+					"hd_task");
 	__hpvm__hint(DEVICE);
 #endif
 
 	top(input_gmem, input_gmem_size, ID_gmem, ID_gmem_size, classHV_gmem, classHV_gmem_size, labels_gmem, labels_gmem_size, encHV_gmem, encHV_gmem_size, train, size);
 
 #ifdef HPVM
-	__hetero_task_end(top_Wrapper);
-	__hetero_section_end(top_Section);
-
 	__hetero_task_end(hd_Wrapper);
 	__hetero_section_end(hd_Section);
+
+	__hetero_task_end(root_Wrapper);
+	__hetero_section_end(root_Section);
 #endif
 }

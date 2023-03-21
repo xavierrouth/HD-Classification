@@ -39,4 +39,4 @@ host-fpga: build/host-fpga.ll
 .PHONY: clean
 
 clean:
-	rm -rf host-normal host-cpu host-fpga build/*.o build/*.ll build/*.tmp build/*.cl *.temp *.aoco
+	rm -rf host-normal host-cpu host-fpga build/*.o build/*.ll build/*.tmp build/*.cl *.temp *.aoco build/*.aocx build/*.aocr
