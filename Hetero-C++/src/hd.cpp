@@ -3,8 +3,8 @@
 #endif
 #include "hd.h"
 
-//#define AUTOCACHE __attribute__ ((autocache (16, 16)))
-#define AUTOCACHE
+#define AUTOCACHE __attribute__ ((autocache (2, 2)))
+//#define AUTOCACHE
 
 /*
  * inputStream fetches input features as ints, and streames to the next functions.
@@ -135,7 +135,7 @@ void encodeUnit(int *__restrict feature_stream, uint32_t *__restrict ID, int *__
  * searchUnitFirstEpoch runs searchUnit for the first epoch, searchUnitRestEpochs runs searchUnit for the rest of the epochs.
  * These are kept separate because of how searchUnit reads from the FIFOs.
  */
-void searchUnitFirstEpoch(int *__restrict enc_stream, int *__restrict classHV_gmem, int *__restrict labels_gmem, HyperVector512 *__restrict encHV_gmem, int train, int size, int iter_read, int *__restrict encHV_partial, int *__restrict dotProductRes, float *__restrict norm2_inv, uint32_t *__restrict encHV_full) {
+void searchUnitFirstEpoch(int *__restrict enc_stream, int *__restrict classHV_gmem, int *__restrict labels_gmem, uint32_t *__restrict encHV_gmem, int train, int size, int iter_read, int *__restrict encHV_partial, int *__restrict dotProductRes, float *__restrict norm2_inv, uint32_t *__restrict encHV_full) {
 	if (iter_read == 0) {
 		//Initialize the class hypervectors.
 		loop_initClass:
@@ -242,18 +242,16 @@ void searchUnitFirstEpoch(int *__restrict enc_stream, int *__restrict classHV_gm
 	if (train > 0) {
 		loop_writeEncHV:
 		for (int i = 0; i < Dhv/512; i++) {
-			HyperVector512 enc_512b;
 			for (int j = 0; j < 512/ROW; j += 1) {
 				//enc_512b.range(j*ROW+ROW-1, j*ROW) = encHV_full[(i*512/ROW) + j];
-				enc_512b.buf[j] = encHV_full[(i*512/ROW) + j];
+				encHV_gmem[512/ROW * (iter_read*(Dhv/512) + i) + j] = encHV_full[(i*512/ROW) + j];
 			}
-			encHV_gmem[iter_read*(Dhv/512) + i] = enc_512b;
 		}
 	}
 
 }
 
-void searchUnitRestEpochs(int *__restrict classHV_gmem, int *__restrict labels_gmem, HyperVector512 *__restrict encHV_gmem, int train, int size, int *__restrict encHV_partial, int *__restrict dotProductRes, float *__restrict norm2_inv, uint32_t *__restrict encHV_full) {
+void searchUnitRestEpochs(int *__restrict classHV_gmem, int *__restrict labels_gmem, uint32_t *__restrict encHV_gmem, int train, int size, int *__restrict encHV_partial, int *__restrict dotProductRes, float *__restrict norm2_inv, uint32_t *__restrict encHV_full) {
 	//At the beginning of each epoch, calculate 1/|C|_2 (we call "1/|C|_2" as norm2).
 	loop_norm_1:
 	for (int i_class = 0; i_class < N_CLASS; i_class++) {
@@ -287,10 +285,9 @@ void searchUnitRestEpochs(int *__restrict classHV_gmem, int *__restrict labels_g
 		//In the subsequent training epochs (i.e., retraining), we just reuse the encoding hypervectors generated in the first epoch.
 		loop_read_encHV:
 		for (int i = 0; i < Dhv/512; i++) {
-			HyperVector512 enc_512b = encHV_gmem[iter_read*(Dhv/512) + i];
 			for (int j = 0; j < 512/ROW; j += 1) {
 				//encHV_full[(i*512/ROW) + j] = enc_512b.range(j*ROW+ROW-1, j*ROW);
-				encHV_full[(i*512/ROW) + j] = enc_512b.buf[j];
+				encHV_full[(i*512/ROW) + j] = encHV_gmem[512/ROW * (iter_read*(Dhv/512) + i) + j];
 			}
 		}
 		//In the first EPOCH, will read Dhv encoding dimensions, ROW by ROW (ROW dimensions per Dhv/COL cycles).
@@ -348,7 +345,7 @@ void searchUnitRestEpochs(int *__restrict classHV_gmem, int *__restrict labels_g
 	}
 }
 
-void top(int *__restrict input_gmem, std::size_t input_gmem_size, int *__restrict ID_gmem, std::size_t ID_gmem_size, int *__restrict classHV_gmem, std::size_t classHV_gmem_size, int *__restrict labels_gmem, std::size_t labels_gmem_size, HyperVector512 *__restrict encHV_gmem, std::size_t encHV_gmem_size, int train, int size) {
+void top(int *__restrict input_gmem, std::size_t input_gmem_size, int *__restrict ID_gmem, std::size_t ID_gmem_size, int *__restrict classHV_gmem, std::size_t classHV_gmem_size, int *__restrict labels_gmem, std::size_t labels_gmem_size, uint32_t *__restrict encHV_gmem, std::size_t encHV_gmem_size, int train, int size) {
 	int feature_stream[N_FEAT_PAD];
 
 	//For now, the encoding stream is integer while we are using bipolar (+1, -1) encoding. Fix it later.
@@ -415,7 +412,7 @@ void top(int *__restrict input_gmem, std::size_t input_gmem_size, int *__restric
  * train (input): number of training epochs (0 = inference)
  * size (input): number of data samples.
  */
-void hd(int *__restrict AUTOCACHE input_gmem, std::size_t input_gmem_size, int *__restrict AUTOCACHE ID_gmem, std::size_t ID_gmem_size, int *__restrict AUTOCACHE classHV_gmem, std::size_t classHV_gmem_size, int *__restrict AUTOCACHE labels_gmem, std::size_t labels_gmem_size, HyperVector512 *__restrict AUTOCACHE encHV_gmem, std::size_t encHV_gmem_size, int train, int size) {
+void hd(int *__restrict AUTOCACHE input_gmem, std::size_t input_gmem_size, int *__restrict AUTOCACHE ID_gmem, std::size_t ID_gmem_size, int *__restrict classHV_gmem, std::size_t classHV_gmem_size, int *__restrict AUTOCACHE labels_gmem, std::size_t labels_gmem_size, uint32_t *__restrict AUTOCACHE encHV_gmem, std::size_t encHV_gmem_size, int train, int size) {
 #ifdef HPVM
 	void *root_Section = __hetero_section_begin();
 	void *root_Wrapper = __hetero_task_begin(

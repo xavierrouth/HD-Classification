@@ -60,7 +60,7 @@ int main(int argc, char** argv)
 	}
 	vector<int, aligned_allocator<int>> classHV_gmem(N_CLASS*Dhv);	
 	
-	vector<HyperVector512, aligned_allocator<HyperVector512>> encHV_gmem((Dhv/32)*N_SAMPLE*sizeof(HyperVector512)/sizeof(int));
+	vector<uint32_t, aligned_allocator<uint32_t>> encHV_gmem((Dhv/32)*N_SAMPLE*512/ROW);
 
 	auto t_elapsed = chrono::high_resolution_clock::now() - t_start;
 	long mSec = chrono::duration_cast<chrono::milliseconds>(t_elapsed).count();
