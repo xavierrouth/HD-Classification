@@ -3,9 +3,6 @@
 #endif
 #include "hd.h"
 
-#define AUTOCACHE __attribute__ ((autocache (2, 2)))
-//#define AUTOCACHE
-
 /*
  * inputStream fetches input features as ints, and streames to the next functions.
  *
@@ -412,7 +409,7 @@ void top(int *__restrict input_gmem, std::size_t input_gmem_size, int *__restric
  * train (input): number of training epochs (0 = inference)
  * size (input): number of data samples.
  */
-void hd(int *__restrict AUTOCACHE input_gmem, std::size_t input_gmem_size, int *__restrict AUTOCACHE ID_gmem, std::size_t ID_gmem_size, int *__restrict classHV_gmem, std::size_t classHV_gmem_size, int *__restrict AUTOCACHE labels_gmem, std::size_t labels_gmem_size, uint32_t *__restrict AUTOCACHE encHV_gmem, std::size_t encHV_gmem_size, int train, int size) {
+void hd(int *__restrict input_gmem, std::size_t input_gmem_size, int *__restrict ID_gmem, std::size_t ID_gmem_size, int *__restrict classHV_gmem, std::size_t classHV_gmem_size, int *__restrict labels_gmem, std::size_t labels_gmem_size, uint32_t *__restrict encHV_gmem, std::size_t encHV_gmem_size, int train, int size) {
 #ifdef HPVM
 	void *root_Section = __hetero_section_begin();
 	void *root_Wrapper = __hetero_task_begin(

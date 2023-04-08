@@ -30,7 +30,7 @@ build/linked.hetero.fpga.ll: build/host.fpga.ll build/hd.fpga.ll
 build/hpvmc.fpga.ll: build/linked.hetero.fpga.ll
 	hcc $< -declsfile $(HPVM_BUILD_DIR)/tools/hpvm/projects/hetero-c++/lib/HPVMCFunctionDeclarations/HPVMCFunctionDeclarations.bc -sanitise-funcs -S -o $@
 build/hpvm.host.fpga.ll build/hpvm.kernels.fpga.ll build/hpvm.kernels.fpga.cl hpvm.kernels.fpga.aocx: build/hpvmc.fpga.ll
-	hpvm2fpga -hm=build/hpvm.host.fpga.ll -km=build/hpvm.kernels.fpga.ll -clm=build/hpvm.kernels.fpga.cl -cxm=build/hpvm.kernels.fpga.aocx -autocache -emu -run-aoc $^
+	hpvm2fpga -hm=build/hpvm.host.fpga.ll -km=build/hpvm.kernels.fpga.ll -clm=build/hpvm.kernels.fpga.cl -cxm=build/hpvm.kernels.fpga.aocx -emu -run-aoc $^
 build/host-fpga.ll: build/hpvm.host.fpga.ll
 	llvm-link -S -o $@ $^ $(HPVM_BUILD_DIR)/tools/hpvm/projects/hpvm-rt/hpvm-rt.bc
 host-fpga: build/host-fpga.ll
