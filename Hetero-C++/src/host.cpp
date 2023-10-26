@@ -1,10 +1,15 @@
+#define HPVM 1
+
 #ifdef HPVM
 #include <heterocc.h>
+#include <hpvm_hdc.h>
+#include "DFG.hpp"
 #endif
 #include "host.h"
-#include "hd.h"
+#include <vector>
+#include <cassert>
+#include <cmath>
 
-using namespace std;
 
 #define DUMP(vec, suffix) {\
   FILE *f = fopen("dump/" #vec suffix, "w");\
@@ -12,8 +17,18 @@ using namespace std;
   if (f) fclose(f);\
 }
 
-void datasetBinaryRead(vector<int> &data, string path){
-	ifstream file_(path, ios::in | ios::binary);
+template <int N, typename elemTy>
+void print_hv(__hypervector__<N, elemTy> hv) {
+    std::cout << "[";
+    for (int i = 0; i < N-1; i++) {
+        std::cout << hv[0][i] << ", ";
+    }
+    std::cout << hv[0][N-1] << "]\n";
+    return;
+}
+
+void datasetBinaryRead(std::vector<int> &data, std::string path){
+	std::ifstream file_(path, std::ios::in | std::ios::binary);
 	assert(file_.is_open() && "Couldn't open file!");
 	int32_t size;
 	file_.read((char*)&size, sizeof(size));
@@ -24,187 +39,292 @@ void datasetBinaryRead(vector<int> &data, string path){
 	}
 	file_.close();
 }
+template <typename T>
+T initialize_hv(T* datapoint_vector, size_t loop_index_var) {
+	//std::cout << ((float*)datapoint_vector)[loop_index_var] << "\n";
+	return datapoint_vector[loop_index_var];
+}
+
+template <typename T>
+T initialize_rp_seed(size_t loop_index_var) {
+	int i = loop_index_var / 32;
+	int j = loop_index_var % 32;
+
+	//std::cout << i << " " << j << "\n";
+	long double temp = log2(i+2.5) * pow(2, 31);
+	long long int temp2 = (long long int)(temp);
+	temp2 = temp2 % 2147483648;
+	//temp2 = temp2 % int(pow(2, 31));
+	//2147483648;
+
+	int ele = temp2 & (0x01 << j); //temp2 && (0x01 << j);
+
+	//std::cout << ele << "\n";
+
+	if (ele) {
+		return (T) 1;
+	}
+	else {
+		return (T) -1;
+	}
+}
+
 
 int main(int argc, char** argv)
 {
-	auto t_start = chrono::high_resolution_clock::now();
+	__hpvm__init();
+
+	auto t_start = std::chrono::high_resolution_clock::now();
+	std::cout << "Main Starting" << std::endl;
+
+	srand(time(NULL));
+
+	int EPOCH = std::atoi(argv[1]);
    
-	vector<int> X_train;
-	vector<int> y_train;
+	std::vector<int> X_train; // X data. 
+	std::vector<int> y_train; // LABELS
 	
 	datasetBinaryRead(X_train, X_train_path);
 	datasetBinaryRead(y_train, y_train_path);
 
-	int N_SAMPLE = y_train.size();
-	int input_int = X_train.size();
-	 
-	vector<int, aligned_allocator<int>> input_gmem(input_int);
-	for(int i = 0; i < input_int; i++){
-		input_gmem[i] = X_train[i];
-	}
-	
-	vector<int, aligned_allocator<int>> labels_gmem(N_SAMPLE);
-	for(int i = 0; i < N_SAMPLE; i++){
-		labels_gmem[i] = y_train[i];
-	}
-
-	//We need a seed ID. To generate in a random yet determenistic (for later debug purposes) fashion, we use bits of log2 as some random stuff.
-	vector<int, aligned_allocator<int>> ID_gmem(Dhv/32);
-	srand (time(NULL));
-	for(int i = 0; i < Dhv/32; i++){
-		long double temp = log2(i+2.5) * pow(2, 31);
-		long long int temp2 = (long long int)(temp);
-		temp2 = temp2 % 2147483648;
-		ID_gmem[i] = (int) temp2;
-		//ID_gmem[i] = int(rand());
-	}
-	vector<int, aligned_allocator<int>> classHV_gmem(N_CLASS*Dhv);	
-	
-	vector<uint32_t, aligned_allocator<uint32_t>> encHV_gmem((Dhv/32)*N_SAMPLE*512/ROW);
-
-	auto t_elapsed = chrono::high_resolution_clock::now() - t_start;
-	long mSec = chrono::duration_cast<chrono::milliseconds>(t_elapsed).count();
-	long mSec_train = mSec;
-
-	auto buf_input = input_gmem.data();
-	auto buf_ID = ID_gmem.data();
-	auto buf_classHV = classHV_gmem.data();
-	auto buf_labels = labels_gmem.data();
-	auto buf_encHV = encHV_gmem.data();
-	auto buf_input_size = input_gmem.size() * sizeof(*buf_input);
-	auto buf_ID_size = ID_gmem.size() * sizeof(*buf_ID);
-	auto buf_classHV_size = classHV_gmem.size() * sizeof(*buf_classHV);
-	auto buf_labels_size = labels_gmem.size() * sizeof(*buf_labels);
-	auto buf_encHV_size = encHV_gmem.size() * sizeof(*buf_encHV);
-	cout << "Training with " << N_SAMPLE << " samples." << endl;
-
-	DUMP(input_gmem, "_input_train");
-	DUMP(ID_gmem, "_input_train");
-	DUMP(classHV_gmem, "_input_train");
-	DUMP(labels_gmem, "_input_train");
-	DUMP(encHV_gmem, "_input_train");
-
-	t_start = chrono::high_resolution_clock::now();
-#ifdef HPVM
-	void *HDTrainDFG = __hetero_launch(
-		(void *) hd,
-		7, 
-		buf_input, buf_input_size,
-		buf_ID, buf_ID_size,
-		buf_classHV, buf_classHV_size,
-		buf_labels, buf_labels_size,
-		buf_encHV, buf_encHV_size,
-		train,
-		N_SAMPLE,
-		5,
-		buf_input, buf_input_size,
-		buf_ID, buf_ID_size,
-		buf_classHV, buf_classHV_size,
-		buf_labels, buf_labels_size,
-		buf_encHV, buf_encHV_size
-	);
-	__hetero_wait(HDTrainDFG);
-#else
-	hd(buf_input, buf_input_size,
-	   buf_ID, buf_ID_size,
-	   buf_classHV, buf_classHV_size,
-	   buf_labels, buf_labels_size,
-	   buf_encHV, buf_encHV_size,
-	   train,
-	   N_SAMPLE);
-#endif
-	t_elapsed = chrono::high_resolution_clock::now() - t_start;
-
-	DUMP(input_gmem, "_output_train");
-	DUMP(ID_gmem, "_output_train");
-	DUMP(classHV_gmem, "_output_train");
-	DUMP(labels_gmem, "_output_train");
-	DUMP(encHV_gmem, "_output_train");
-	
-	mSec = chrono::duration_cast<chrono::milliseconds>(t_elapsed).count();
-	//cout << "Reading train data took " << mSec_train << " mSec" << endl;
-	//cout << "Train execution took " << mSec << " mSec" << endl;
-	
-	/*for(int i = 0; i < N_CLASS; i++){
-		cout << classHV_gmem[i*Dhv] << "\t" << classHV_gmem[i*Dhv + Dhv - 1] << endl;
-	}*/
-	t_start = chrono::high_resolution_clock::now();
-	vector<int> X_test;
-	vector<int> y_test;
+	std::vector<int> X_test;
+	std::vector<int> y_test;
 	
 	datasetBinaryRead(X_test, X_test_path);
 	datasetBinaryRead(y_test, y_test_path);
 
-	input_int = X_test.size();	 
-	input_gmem.resize(input_int);
-	for(int i = 0; i < input_int; i++){
-		input_gmem[i] = X_test[i];
-	}
+	std::cout << "Read Data Starting" << std::endl;
+
+	srand(0);
 	
-	t_elapsed = chrono::high_resolution_clock::now() - t_start;
-	mSec = chrono::duration_cast<chrono::milliseconds>(t_elapsed).count();
-	long mSec_test = mSec;
-	
+	assert(N_SAMPLE == y_train.size());
+
 	int N_TEST = y_test.size();
-	labels_gmem.resize(N_TEST);
 	
-    	train = 0; //i.e., inference
-	auto buf_input2 = input_gmem.data();
-	auto buf_labels2 = labels_gmem.data();
-	auto buf_input2_size = input_gmem.size() * sizeof(*buf_input2);
-	auto buf_labels2_size = labels_gmem.size() * sizeof(*buf_labels2);
+	std::vector<hvtype> floatVec(X_train.begin(), X_train.end());
 
-	DUMP(input_gmem, "_input_test");
-	DUMP(ID_gmem, "_input_test");
-	DUMP(classHV_gmem, "_input_test");
-	DUMP(labels_gmem, "_input_test");
-	DUMP(encHV_gmem, "_input_test");
+	hvtype* input_vectors = floatVec.data();
+	// N_FEAT is number of entries per vector
+	size_t input_vector_size = N_FEAT * sizeof(hvtype); // Size of a single vector
 
-	t_start = chrono::high_resolution_clock::now();
-#ifdef HPVM
-	void *HDTestDFG = __hetero_launch(
-		(void *) hd,
-		7, 
-		buf_input2, buf_input2_size,
-		buf_ID, buf_ID_size,
-		buf_classHV, buf_classHV_size,
-		buf_labels2, buf_labels2_size,
-		buf_encHV, buf_encHV_size,
-		train,
-		N_TEST,
-		5,
-		buf_input2, buf_input2_size,
-		buf_ID, buf_ID_size,
-		buf_classHV, buf_classHV_size,
-		buf_labels2, buf_labels2_size,
-		buf_encHV, buf_encHV_size
-	);
-	__hetero_wait(HDTestDFG);
-#else
-	hd(buf_input2, buf_input2_size,
-	   buf_ID, buf_ID_size,
-	   buf_classHV, buf_classHV_size,
-	   buf_labels2, buf_labels2_size,
-	   buf_encHV, buf_encHV_size,
-	   train,
-	   N_TEST);
-#endif
-    	t_elapsed = chrono::high_resolution_clock::now() - t_start;
+	int labels[N_SAMPLE]; 
+	// N_SAMPLE is number of input vectors
+	size_t labels_size = N_SAMPLE * sizeof(int);
 
-	DUMP(input_gmem, "_output_test");
-	DUMP(ID_gmem, "_output_test");
-	DUMP(classHV_gmem, "_output_test");
-	DUMP(labels_gmem, "_output_test");
-	DUMP(encHV_gmem, "_output_test");
+	auto t_elapsed = std::chrono::high_resolution_clock::now() - t_start;
+	long mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_elapsed).count();
+	long mSec1 = mSec;
+	std::cout << "Reading data took " << mSec << " mSec" << std::endl;
 
-    	mSec = chrono::duration_cast<chrono::milliseconds>(t_elapsed).count();
-    	//cout << "Reading test data took " << mSec_test << " mSec" << endl;
-	//cout << "Test execution took " << mSec << " mSec" << endl;
-    
-    	int correct = 0;
+	t_start = std::chrono::high_resolution_clock::now();
+
+	// Host allocated memory 
+	__hypervector__<Dhv, hvtype> encoded_hv = __hetero_hdc_hypervector<Dhv, hvtype>();
+	hvtype* encoded_hv_buffer = new hvtype[Dhv];
+	size_t encoded_hv_size = Dhv * sizeof(hvtype);
+
+	__hypervector__<Dhv, hvtype> update_hv = __hetero_hdc_hypervector<Dhv, hvtype>();
+	//hvtype* update_hv_ptr = new hvtype[Dhv];
+	size_t update_hv_size = Dhv * sizeof(hvtype);
+	
+	// Used to store a temporary class_hv for initializion
+	__hypervector__<Dhv, hvtype> class_hv = __hetero_hdc_hypervector<Dhv, hvtype>();
+	hvtype* class_buffer = new hvtype[Dhv];
+	size_t class_size = Dhv * sizeof(hvtype);
+
+	// Read from during classification
+	__hypermatrix__<N_CLASS, Dhv, hvtype> classes = __hetero_hdc_hypermatrix<N_CLASS, Dhv, hvtype>();
+	hvtype* classes_buffer = new hvtype[N_CLASS * Dhv];
+	size_t classes_size = N_CLASS * Dhv * sizeof(hvtype);
+
+	// Temporarily store scores, allows us to split score calcuation into a separte task.
+	__hypervector__<Dhv, hvtype> scores = __hetero_hdc_hypervector<Dhv, hvtype>();
+	hvtype* scores_buffer = new hvtype[N_CLASS];
+	size_t scores_size = N_CLASS * sizeof(hvtype);
+
+	// Encoding matrix: First we write into rp_matrix_transpose, then transpose it to get rp_matrix,
+	// which is the correct dimensions for encoding input features.
+	__hypermatrix__<N_FEAT, Dhv, hvtype> rp_matrix_transpose = __hetero_hdc_hypermatrix<N_FEAT, Dhv, hvtype>();
+	__hypermatrix__<Dhv, N_FEAT, hvtype> rp_matrix = __hetero_hdc_hypermatrix<Dhv, N_FEAT, hvtype>();
+	hvtype* rp_matrix_buffer = new hvtype[N_FEAT * Dhv];
+
+	size_t rp_matrix_size = N_FEAT * Dhv * sizeof(hvtype);
+
+	__hypervector__<Dhv, hvtype> rp_seed = __hetero_hdc_create_hypervector<Dhv, hvtype>(0, (void*) initialize_rp_seed<hvtype>);	
+
+	std::cout << "Dimension over 32: " << Dhv/32 << std::endl;
+	//We need a seed ID. To generate in a random yet determenistic (for later debug purposes) fashion, we use bits of log2 as some random stuff.
+
+	std::cout << "Seed hv:\n";
+	//print_hv<Dhv, hvtype>(rp_seed);
+	std::cout << "After seed generation\n";
+
+	// Dhv needs to be greater than N_FEAT for the orthognality to hold.
+
+	// Generate the random projection matrix. Dhv rows, N_FEAT cols, so Dhv x N_FEAT.
+	__hypervector__<Dhv, hvtype> row = __hetero_hdc_hypervector<Dhv, hvtype>();
+
+	// Each row is just a wrap shift of the seed.
+	for (int i = 0; i < N_FEAT; i++) {
+		row = __hetero_hdc_wrap_shift<Dhv, hvtype>(rp_seed, i);
+		//print_hv<Dhv, hvtype>(row);
+		__hetero_hdc_set_matrix_row<N_FEAT, Dhv, hvtype>(rp_matrix_transpose, row, i);
+	} 
+
+	// Now transpose in order to be able to multiply with input hv in DFG.
+	rp_matrix = __hetero_hdc_matrix_transpose<N_FEAT, Dhv, hvtype>(rp_matrix_transpose, N_FEAT, Dhv);
+
+	// ============ Training ===============
+
+	// Initialize class hvs.
+	// FIXME: Verify that the classes matrix is set to 0 by the compiler.
+	std::cout << "Init class hvs:" << std::endl;
+	// TODO: Move to DAG.
+	for (int i = 0; i < N_SAMPLE; i++) {
+		__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, input_vectors + i * N_FEAT_PAD);
+
+		// Encode each input datapoitn
+		void* initialize_DFG = __hetero_launch(
+			(void*) rp_encoding_node_copy<Dhv, N_FEAT>, //FIXME: Make this a copy. 
+			2 + 1,
+			/* Input Buffers: 2*/ 
+			&rp_matrix, rp_matrix_size, //false,
+			&datapoint_hv, input_vector_size,
+			/* Output Buffers: 1*/ 
+			&encoded_hv, class_size,  //false,
+			1,
+			&encoded_hv, class_size //false
+		);
+
+		__hetero_wait(initialize_DFG);
+
+		int label = labels[i];
+
+		// rp_encoding_node encodes a single encoded_hv, which we then have to accumulate to our big group of classes in class_hv[s].
+
+		update_hv =  __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, label);
+		update_hv = __hetero_hdc_sum<Dhv, hvtype>(update_hv, encoded_hv); 
+		__hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, encoded_hv, label); 
+	}
+
+	std::cout << "Done init class hvs:" << std::endl;
+
+	#if DEBUG
+	for (int i = 0; i < N_CLASS; i++) {
+		__hypervector__<Dhv, hvtype> class_temp = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, i);
+		std::cout << i << " ";
+		print_hv<Dhv, hvtype>(class_temp);
+	}
+	#endif
+
+	// ======= Training Rest Epochs ======= 
+	for (int i = 0; i < EPOCH; i++) {
+		// Can we normalize the hypervectors here or do we have to do that in the DFG.
+		std::cout << "Epoch: #" << i << std::endl;
+		for (int j = 0; j < N_SAMPLE; j++) {
+
+			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, input_vectors + j * N_FEAT_PAD);
+
+			// Root node is: Encoding -> classing for a single HV.
+			void *DFG = __hetero_launch(
+
+				(void*) training_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>,
+
+				/* Input Buffers: 4*/ 8,
+				&rp_matrix, rp_matrix_size, //false,
+				&datapoint_hv, input_vector_size, //true,
+				&classes, classes_size, //false,
+				/* Local Var Buffers 4*/
+				encoded_hv_buffer, encoded_hv_size,// false,
+				scores_buffer, scores_size,
+                &update_hv, update_hv_size,
+				labels, labels_size,
+				j,
+				/* Output Buffers: 1*/ 
+				1,
+				&classes, classes_size
+			);
+			__hetero_wait(DFG); 
+
+			//std::cout << "after root launch" << std::endl;
+	
+		}
+		// then update classes and copy classs_tmp to classes, 
+
+		// TODO: Move to DAG
+		std::cout << "after root node\n";
+		
+		// TODO: Just swap pointers?? 
+		#if 0 // FIXME: We may need something like this.
+		for (int k = 0; k < N_CLASS; k++) {
+			// set temp_classs -> classes
+			__hypervector__<Dhv, hvtype> class_temp = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classs_temp, N_CLASS, Dhv, k);
+			std::cout << k << " ";
+
+			// Normalize or sign?
+
+			#ifdef HAMMING_DIST
+			__hypervector__<Dhv, hvtype> class_norm = __hetero_hdc_sign<Dhv, hvtype>(class_temp);
+			__hetero_hdc_set_matrix_row(classes, class_norm, k);
+			#else
+			__hetero_hdc_set_matrix_row(classes, class_temp, k);
+			#endif
+		} 
+		#endif
+
+	}
+
+
+	std::cout << "inference starting" << std::endl;
+
+	// ============ Inference ===============
+
+	for (int j = 0; j < N_SAMPLE; j++) {
+
+			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, input_vectors + j * N_FEAT_PAD);
+
+			// Root node is: Encoding -> classing for a single HV.
+			void *DFG = __hetero_launch(
+
+				(void*) inference_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>,
+
+				/* Input Buffers: 3*/ 7,
+				&rp_matrix, rp_matrix_size, //false,
+				&datapoint_hv, input_vector_size, //true,
+				&classes, classes_size, //false,
+				/* Local Var Buffers 2*/
+				encoded_hv_buffer, encoded_hv_size,// false,
+				scores_buffer, scores_size,
+				j, 
+				/* Output Buffers: 1*/ 
+				labels, labels_size,
+				1,
+				labels, labels_size //, false
+			);
+			__hetero_wait(DFG); 
+
+			//std::cout << "after root launch" << std::endl;
+	
+		}
+	std::cout << "After Inference" << std::endl;
+
+
+	t_elapsed = std::chrono::high_resolution_clock::now() - t_start;
+	
+	mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_elapsed).count();
+
+	int correct = 0;
     	for(int i = 0; i < N_TEST; i++)
-    		if(labels_gmem[i] == y_test[i])
+    		if(labels[i] == y_test[i])
     			correct += 1;
-    	cout << "Test accuracy = " << float(correct)/N_TEST << endl;
+    
+	std::cout << "Test accuracy = " << float(correct)/N_TEST << std::endl;
+
+
+	__hpvm__cleanup();
+	return 0;
 }
+
+
+
 
