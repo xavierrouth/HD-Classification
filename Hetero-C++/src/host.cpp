@@ -217,6 +217,7 @@ int main(int argc, char** argv)
 	}
 	#endif
 
+	#if 0 
 	// ======= Training Rest Epochs ======= 
 	for (int i = 0; i < EPOCH; i++) {
 		// Can we normalize the hypervectors here or do we have to do that in the DFG.
@@ -225,6 +226,7 @@ int main(int argc, char** argv)
 
 			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, input_vectors + j * N_FEAT_PAD);
 
+			std::cout << "before launch" << std::endl;
 			// Root node is: Encoding -> classing for a single HV.
 			void *DFG = __hetero_launch(
 
@@ -274,20 +276,20 @@ int main(int argc, char** argv)
 
 	}
 
-
+	#endif
 	std::cout << "inference starting" << std::endl;
 
 	// ============ Inference ===============
-
+	
 	for (int j = 0; j < N_SAMPLE; j++) {
+
+			//std::cout << "Inference vec: #" << j << std::endl;
 
 			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, input_vectors + j * N_FEAT_PAD);
 
 			// Root node is: Encoding -> classing for a single HV.
 			void *DFG = __hetero_launch(
-
 				(void*) inference_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>,
-
 				/* Input Buffers: 3*/ 7,
 				&rp_matrix, rp_matrix_size, //false,
 				&datapoint_hv, input_vector_size, //true,
@@ -306,8 +308,8 @@ int main(int argc, char** argv)
 			//std::cout << "after root launch" << std::endl;
 	
 		}
+	
 	std::cout << "After Inference" << std::endl;
-
 
 	t_elapsed = std::chrono::high_resolution_clock::now() - t_start;
 	

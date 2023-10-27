@@ -13,8 +13,8 @@
 
 int train = 3; // number of training epochs (0 = inference)
 
-#define N_FEAT	  617 //feature per input (e.g., isolet: 617)
-#define N_CLASS		26	//number of classes. (e.g., isolet: 26, ucihar 12)
+#define N_FEAT	        617 //feature per input (e.g., isolet: 617)
+#define N_CLASS		    26	//number of classes. (e.g., isolet: 26, ucihar 12)
 #define Dhv				512  //hypervectors length
 #define N_SAMPLE 		6238 // FIXME: Make these parametesr variable.
 

@@ -4,14 +4,14 @@
 #include <heterocc.h>
 #include <iostream>
 
-#define HAMMING_DIST
+//#define HAMMING_DIST
 
 #undef D
 #undef N_FEATURES
 #undef K
 
 typedef int binary;
-typedef int hvtype;
+typedef float hvtype;
 
 // RANDOM PROJECTION ENCODING!!
 // Matrix-vector mul
@@ -121,13 +121,61 @@ void rp_encoding_node_copy(/* Input Buffers: 2*/
     return;
 }
 
+template<int D, int N_FEATURES>
+void rp_encoding_node_copy_copy(/* Input Buffers: 2*/
+        __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, // __hypermatrix__<N_FEATURES, D, binary>
+        __hypervector__<N_FEATURES, hvtype>* input_datapoint_ptr, size_t input_datapoint_size, // __hypervector__<N_FEATURES, int> 
+        /* Output Buffers: 1*/
+        __hypervector__<D, hvtype>* output_hv_ptr, size_t output_hv_size) { // __hypervector__<D, binary>
+    
+    void* section = __hetero_section_begin();
+
+#if FGPA
+    __hetero_hint(DEVICE);
+#endif
+
+    void* task = __hetero_task_begin(
+        /* Input Buffers: 2*/ 3, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size,
+        /* Parameters: 0*/
+        /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size,
+        "inner_rp_encoding_task"
+    );
+
+    //std::cout << "encoding node" << std::endl;
+    
+#if FGPA
+    __hetero_hint(DEVICE);
+#endif
+    
+    __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
+    *output_hv_ptr = encoded_hv;
+
+    encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
+    // Uses the output_hv_ptr for the buffer. So that we can lower to 
+    // additional tasks. We should do an optimization in the bufferization
+    // analysis to re-use the same buffer (especially those coming from the
+    // formal parameters) to enable more of these tasks to become parallel loops.
+    *output_hv_ptr = encoded_hv;
+    
+    #ifdef HAMMING_DIST
+    __hypervector__<D, int> bipolar_encoded_hv = __hetero_hdc_sign<D, int>(encoded_hv);
+    *output_hv_ptr = bipolar_encoded_hv;
+    #endif
+
+
+    __hetero_task_end(task); 
+
+    __hetero_section_end(section);
+    return;
+}
+
 
 // train == 0
 // In the streaming implementation, this runs for each encoded HV, so N_VEC * EPOCHs times.
 
 /* Just make guesses based on cossim  */
 template<int D, int K, int N_VEC> // ONLY RUNS ONCE
-void classification_node_inference(
+void __attribute__ ((noinline)) classification_node_inference(
     __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, // __hypervector__<D, binary>
     __hypermatrix__<K, D, hvtype>* classes_ptr, size_t classes_size, // __hypermatrix__<K, D, binary>
     __hypervector__<K, hvtype>* scores_ptr, size_t scores_size, // Used as Local var.
@@ -143,24 +191,30 @@ void classification_node_inference(
         /* Input Buffers: */ 3, encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size, scores_ptr, scores_size, 
         /* Output Buffers: */ 1, scores_ptr, scores_size, "inference_calculate_score_task"
     );
-    // Class HVs are created via 'clustering' on +1, -1 encoded hypervectors. (loop 269).
 
+    
+    // Class HVs are created via 'clustering' on +1, -1 encoded hypervectors. (loop 269).
     __hypervector__<D, hvtype> encoded_hv = *encoded_hv_ptr;
     __hypermatrix__<K, D, hvtype> classes = *classes_ptr;
 
     __hypervector__<K, hvtype> scores = *scores_ptr; // Precision of these scores might need to be increased.
 
     #ifdef HAMMING_DIST
-    *scores_ptr =  __hetero_hdc_hamming_distance<K, D, hvtype>(encoded_hv, classes);
+    printf("before hamming_dist\n");
+    //auto v =  __hetero_hdc_get_matrix_row<K, D, hvtype>(classes, K, D, 1);
+    // FIXME: This is causing a segmentation fault. 
+    *scores_ptr =  __hetero_hdc_hamming_distance<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
+    printf("after hamming_dist\n");
     #else
-    *scores_ptr = __hetero_hdc_cossim<K, D, hvtype>(encoded_hv, classes);
+    printf("before cossim\n");
+    *scores_ptr = __hetero_hdc_cossim<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
+    printf("after cossim\n");
     #endif
-
 
     __hetero_task_end(task1);
 
     void* task2 = __hetero_task_begin(
-        /* Input Buffers: 1*/ 5, scores_ptr, scores_size, labels, labels_size, encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size,
+        /* Input Buffers: 1*/ 4, scores_ptr, scores_size, labels, labels_size, encoded_hv_ptr, encoded_hv_size,
         /* paramters: 1*/       encoded_hv_idx,
         /* Output Buffers: 1*/ 1,  labels, labels_size, "inference_find_max_task"
     );  
@@ -254,6 +308,7 @@ void classification_node_training_rest(/* Input Buffers: 2 */
         /* Output Buffers: */ 1, scores_ptr, scores_size, "training_rest_scoring_task"
     );
     // Class HVs are created via 'clustering' on +1, -1 encoded hypervectors. (loop 269).
+    std::cout << "training task 1" << std::endl;
 
     __hypervector__<D, hvtype> encoded_hv = *encoded_hv_ptr;
     __hypermatrix__<K, D, hvtype> classes = *classes_ptr;
@@ -261,7 +316,7 @@ void classification_node_training_rest(/* Input Buffers: 2 */
     __hypervector__<K, hvtype> scores = *scores_ptr; // Precision of these scores might need to be increased.
 
     #ifdef HAMMING_DIST
-    *scores_ptr =  __hetero_hdc_hamming_distance<K, D, hvtype>(encoded_hv, classes);
+    *scores_ptr =  __hetero_hdc_hamming_distance<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
     #else
     *scores_ptr = __hetero_hdc_cossim<K, D, hvtype>(encoded_hv, classes);
     #endif
@@ -388,12 +443,13 @@ void training_root_node( /* Input buffers: 2*/
 // Dimensionality, Clusters, data point vectors, features per.
 template <int D, int K, int N_VEC, int N_FEATURES>
 void inference_root_node( /* Input buffers: 3*/ 
-                __hypermatrix__<D, N_FEATURES, int>* rp_matrix_ptr, size_t rp_matrix_size, // __hypermatrix__<N_FEATURES, D, binary>
-                __hypervector__<N_FEATURES, int>* datapoint_vec_ptr, size_t datapoint_vec_size, // Features
-                __hypermatrix__<K, D, int>* classes_ptr, size_t classes_size, // __hypermatrix__<K, D, binary>
+                __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, // __hypermatrix__<N_FEATURES, D, binary>
+                __hypervector__<N_FEATURES, hvtype>* datapoint_vec_ptr, size_t datapoint_vec_size, // Features
+                __hypermatrix__<K, D, hvtype>* classes_ptr, size_t classes_size, // __hypermatrix__<K, D, binary>
                 /* Local Vars: 2*/
-                __hypervector__<D, int>* encoded_hv_ptr, size_t encoded_hv_size, // // __hypervector__<D, binary>
-                __hypervector__<K, int>* scores_ptr, size_t scores_size,
+                __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, // // __hypervector__<D, binary>
+                __hypervector__<K, hvtype>* scores_ptr, size_t scores_size,
+                // FIXME, give scores its own type.
                 /* Parameters: 1*/
                 int encoded_hv_idx,
                 /* Output Buffers: 1*/
@@ -401,7 +457,6 @@ void inference_root_node( /* Input buffers: 3*/
 
     void* root_section = __hetero_section_begin();
 
-    
     // Re-encode each iteration.
     void* encoding_task = __hetero_task_begin(
         /* Input Buffers: 3 */ 3, rp_matrix_ptr, rp_matrix_size, datapoint_vec_ptr, datapoint_vec_size, 
@@ -410,7 +465,9 @@ void inference_root_node( /* Input buffers: 3*/
         "inference_encoding_task"  
     );
 
-    rp_encoding_node<D, N_FEATURES>(rp_matrix_ptr, rp_matrix_size, datapoint_vec_ptr, datapoint_vec_size, encoded_hv_ptr, encoded_hv_size);
+    //std::cout << "inference encoding task" << std::endl;
+
+    rp_encoding_node_copy_copy<D, N_FEATURES>(rp_matrix_ptr, rp_matrix_size, datapoint_vec_ptr, datapoint_vec_size, encoded_hv_ptr, encoded_hv_size);
 
     __hetero_task_end(encoding_task);
 
