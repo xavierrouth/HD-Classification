@@ -90,26 +90,46 @@ int main(int argc, char** argv)
 	std::vector<int> X_test;
 	std::vector<int> y_test;
 	
-	datasetBinaryRead(X_test, X_test_path);
-	datasetBinaryRead(y_test, y_test_path);
+	// FIXME, run inference on training dataset and make sure we get 100% accuracy.
+	//datasetBinaryRead(X_test, X_test_path);
+	//datasetBinaryRead(y_test, y_test_path);
 
+	datasetBinaryRead(X_test, X_train_path);
+	datasetBinaryRead(y_test, y_train_path);
+
+	for (int i = 0; i < y_test.size(); i++) {
+		std::cout << y_test[i] << " ";
+	}
 	std::cout << "Read Data Starting" << std::endl;
 
 	srand(0);
 	
 	assert(N_SAMPLE == y_train.size());
+	assert(N_TEST == y_test.size());
 
-	int N_TEST = y_test.size();
+	// std::cout << y_test.size();
 	
-	std::vector<hvtype> floatVec(X_train.begin(), X_train.end());
-
-	hvtype* input_vectors = floatVec.data();
+	// TRAINING DATA INITIALZIATION
+	// FIXME: Should probably remove padding here, not durin gnode launches. 
+	std::vector<hvtype> temp_vec(X_train.begin(), X_train.end());
+	hvtype* training_input_vectors = temp_vec.data();
 	// N_FEAT is number of entries per vector
 	size_t input_vector_size = N_FEAT * sizeof(hvtype); // Size of a single vector
 
-	int labels[N_SAMPLE]; 
+	int* training_labels = y_train.data(); // Get your training labels.
 	// N_SAMPLE is number of input vectors
-	size_t labels_size = N_SAMPLE * sizeof(int);
+	size_t training_labels_size = N_SAMPLE * sizeof(int);
+
+	// INFERENCE DATA / TEST DATA
+	int inference_labels[N_TEST];
+	size_t inference_labels_size = N_TEST * sizeof(int);
+
+	// TRAINING DATA INITIALZIATION
+	std::vector<hvtype> temp_vec2(X_test.begin(), X_test.end());
+	hvtype* inference_input_vectors = temp_vec.data();
+	// N_FEAT is number of entries per vector
+
+
 
 	auto t_elapsed = std::chrono::high_resolution_clock::now() - t_start;
 	long mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_elapsed).count();
@@ -174,6 +194,25 @@ int main(int argc, char** argv)
 	// Now transpose in order to be able to multiply with input hv in DFG.
 	rp_matrix = __hetero_hdc_matrix_transpose<N_FEAT, Dhv, hvtype>(rp_matrix_transpose, N_FEAT, Dhv);
 
+	// Confirm that there are equal amounts of each label:
+	#if 0
+	int counts [N_CLASS];
+
+	for (int i = 0; i < N_CLASS; i++) {
+		counts[i] = 0;
+	}
+
+	for (int i = 0; i < N_SAMPLE; i++) {
+		int idx = training_labels[i];
+		counts[idx] += 1;
+	}
+
+	for (int i = 0; i < N_CLASS; i++) {
+		std::cout << i << " " << counts[i] <<std::endl;
+	}
+	#endif
+
+
 	// ============ Training ===============
 
 	// Initialize class hvs.
@@ -181,7 +220,7 @@ int main(int argc, char** argv)
 	std::cout << "Init class hvs:" << std::endl;
 	// TODO: Move to DAG.
 	for (int i = 0; i < N_SAMPLE; i++) {
-		__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, input_vectors + i * N_FEAT_PAD);
+		__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + i * N_FEAT_PAD);
 
 		// Encode each input datapoitn
 		void* initialize_DFG = __hetero_launch(
@@ -198,18 +237,19 @@ int main(int argc, char** argv)
 
 		__hetero_wait(initialize_DFG);
 
-		int label = labels[i];
+		int label = training_labels[i];
 
 		// rp_encoding_node encodes a single encoded_hv, which we then have to accumulate to our big group of classes in class_hv[s].
 
 		update_hv =  __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, label);
 		update_hv = __hetero_hdc_sum<Dhv, hvtype>(update_hv, encoded_hv); 
 		__hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, encoded_hv, label); 
+		//print_hv<Dhv, hvtype>(update_hv);
 	}
 
 	std::cout << "Done init class hvs:" << std::endl;
 
-	#if DEBUG
+	#if 1
 	for (int i = 0; i < N_CLASS; i++) {
 		__hypervector__<Dhv, hvtype> class_temp = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, i);
 		std::cout << i << " ";
@@ -217,16 +257,19 @@ int main(int argc, char** argv)
 	}
 	#endif
 
-	#if 0 
+	int argmax[1];
+
+	// Training generates classes from labeled data. 
 	// ======= Training Rest Epochs ======= 
 	for (int i = 0; i < EPOCH; i++) {
 		// Can we normalize the hypervectors here or do we have to do that in the DFG.
 		std::cout << "Epoch: #" << i << std::endl;
 		for (int j = 0; j < N_SAMPLE; j++) {
 
-			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, input_vectors + j * N_FEAT_PAD);
+			//printf("before creat hv\n");
+			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + j * N_FEAT_PAD);
 
-			std::cout << "before launch" << std::endl;
+			//printf("before root launch\n");
 			// Root node is: Encoding -> classing for a single HV.
 			void *DFG = __hetero_launch(
 
@@ -240,56 +283,45 @@ int main(int argc, char** argv)
 				encoded_hv_buffer, encoded_hv_size,// false,
 				scores_buffer, scores_size,
                 &update_hv, update_hv_size,
-				labels, labels_size,
-				j,
+				&argmax[0], sizeof(int),
+				training_labels[j], 
 				/* Output Buffers: 1*/ 
 				1,
 				&classes, classes_size
 			);
 			__hetero_wait(DFG); 
 
-			//std::cout << "after root launch" << std::endl;
+			// Print out the class that this hv is labeled as. 
+
+			//printf("after training root launch\n");
 	
 		}
-		// then update classes and copy classs_tmp to classes, 
-
-		// TODO: Move to DAG
-		std::cout << "after root node\n";
-		
-		// TODO: Just swap pointers?? 
-		#if 0 // FIXME: We may need something like this.
-		for (int k = 0; k < N_CLASS; k++) {
-			// set temp_classs -> classes
-			__hypervector__<Dhv, hvtype> class_temp = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classs_temp, N_CLASS, Dhv, k);
-			std::cout << k << " ";
-
-			// Normalize or sign?
-
-			#ifdef HAMMING_DIST
-			__hypervector__<Dhv, hvtype> class_norm = __hetero_hdc_sign<Dhv, hvtype>(class_temp);
-			__hetero_hdc_set_matrix_row(classes, class_norm, k);
-			#else
-			__hetero_hdc_set_matrix_row(classes, class_temp, k);
-			#endif
-		} 
-		#endif
-
 	}
 
-	#endif
+	std::ofstream training_file("training-classes.txt");
+
+	for(int i = 0; i < N_CLASS; i++) {
+
+		// Basically, these should be CHANGING for the same class. 
+		update_hv = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, i);
+		print_hv<Dhv, hvtype>(update_hv);
+		printf("label: %d\n", i);
+
+	}
 	std::cout << "inference starting" << std::endl;
 
-	// ============ Inference ===============
+	// ============ Inference =============== //
 	
-	for (int j = 0; j < N_SAMPLE; j++) {
+	/* For each hypervector, inference calculates what class it is closest to and labels the hypervectorit accordingly.*/
+	for (int j = 0; j < N_TEST; j++) {
 
 			//std::cout << "Inference vec: #" << j << std::endl;
 
-			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, input_vectors + j * N_FEAT_PAD);
+			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, inference_input_vectors + j * N_FEAT_PAD);
 
 			// Root node is: Encoding -> classing for a single HV.
 			void *DFG = __hetero_launch(
-				(void*) inference_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>,
+				(void*) inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>,
 				/* Input Buffers: 3*/ 7,
 				&rp_matrix, rp_matrix_size, //false,
 				&datapoint_hv, input_vector_size, //true,
@@ -299,9 +331,9 @@ int main(int argc, char** argv)
 				scores_buffer, scores_size,
 				j, 
 				/* Output Buffers: 1*/ 
-				labels, labels_size,
+				inference_labels + a, sizeof(int),
 				1,
-				labels, labels_size //, false
+				inference_labels + a, sizeof(int) //, false
 			);
 			__hetero_wait(DFG); 
 
@@ -315,9 +347,14 @@ int main(int argc, char** argv)
 	
 	mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_elapsed).count();
 
+	std::ofstream myfile("out.txt");
+	for(int i = 0; i < N_TEST; i++){
+		myfile << y_test[i] << " " << inference_labels[i] << std::endl;
+	}
+
 	int correct = 0;
     	for(int i = 0; i < N_TEST; i++)
-    		if(labels[i] == y_test[i])
+    		if(inference_labels[i] == y_test[i])
     			correct += 1;
     
 	std::cout << "Test accuracy = " << float(correct)/N_TEST << std::endl;
