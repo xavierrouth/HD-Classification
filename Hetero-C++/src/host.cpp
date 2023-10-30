@@ -153,7 +153,7 @@ int main(int argc, char** argv)
 	size_t class_size = Dhv * sizeof(hvtype);
 
 	// Read from during classification
-	__hypermatrix__<N_CLASS, Dhv, hvtype> classes = __hetero_hdc_hypermatrix<N_CLASS, Dhv, hvtype>();
+	__hypermatrix__<N_CLASS, Dhv, hvtype> classes = __hetero_hdc_create_hypermatrix<N_CLASS, Dhv, hvtype>(0, (void*) zero_hv<hvtype>);
 	hvtype* classes_buffer = new hvtype[N_CLASS * Dhv];
 	size_t classes_size = N_CLASS * Dhv * sizeof(hvtype);
 
@@ -273,16 +273,19 @@ int main(int argc, char** argv)
 
 		// rp_encoding_node encodes a single encoded_hv, which we then have to accumulate to our big group of classes in class_hv[s].
 
+		//print_hv<Dhv, hvtype>(encoded_hv);
+
+		// accumulate each encoded hv to its corresponding class.
 		// FIXME: Should this be a dfg?? 
 		update_hv =  __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, label);
 		update_hv = __hetero_hdc_sum<Dhv, hvtype>(update_hv, encoded_hv); 
 		__hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, encoded_hv, label); 
-		//print_hv<Dhv, hvtype>(update_hv);
+		//print_hv<Dhv, hvtype>(update_hv); //TODO: Maybe there should be a _hdc_sign applied here.
 	}
 
 	std::cout << "Done init class hvs:" << std::endl;
 
-	#if 1
+	#if 0
 	for (int i = 0; i < N_CLASS; i++) {
 		__hypervector__<Dhv, hvtype> class_temp = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, i);
 		std::cout << i << " ";
@@ -329,6 +332,14 @@ int main(int argc, char** argv)
 			//printf("after training root launch\n");
 	
 		}
+
+		#if 0
+		for (int i = 0; i < N_CLASS; i++) {
+			__hypervector__<Dhv, hvtype> class_temp = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, i);
+			std::cout << i << " ";
+			print_hv<Dhv, hvtype>(class_temp);
+		}
+		#endif
 	}
 
 	std::ofstream training_file("training-classes.txt");
