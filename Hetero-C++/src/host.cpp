@@ -90,12 +90,12 @@ int main(int argc, char** argv)
 	std::vector<int> X_test;
 	std::vector<int> y_test;
 	
-	// FIXME, run inference on training dataset and make sure we get 100% accuracy.
-	//datasetBinaryRead(X_test, X_test_path);
-	//datasetBinaryRead(y_test, y_test_path);
+	datasetBinaryRead(X_test, X_test_path);
+	datasetBinaryRead(y_test, y_test_path);
 
-	datasetBinaryRead(X_test, X_train_path);
-	datasetBinaryRead(y_test, y_train_path);
+	// FIXME, run inference on training dataset and make sure we get 100% accuracy.
+	//datasetBinaryRead(X_test, X_train_path);
+	//datasetBinaryRead(y_test, y_train_path);
 
 	for (int i = 0; i < y_test.size(); i++) {
 		std::cout << y_test[i] << " ";
@@ -164,9 +164,7 @@ int main(int argc, char** argv)
 
 	// Encoding matrix: First we write into rp_matrix_transpose, then transpose it to get rp_matrix,
 	// which is the correct dimensions for encoding input features.
-	__hypermatrix__<N_FEAT, Dhv, hvtype> rp_matrix_transpose = __hetero_hdc_hypermatrix<N_FEAT, Dhv, hvtype>();
-	__hypermatrix__<Dhv, N_FEAT, hvtype> rp_matrix = __hetero_hdc_hypermatrix<Dhv, N_FEAT, hvtype>();
-	hvtype* rp_matrix_buffer = new hvtype[N_FEAT * Dhv];
+
 
 	size_t rp_matrix_size = N_FEAT * Dhv * sizeof(hvtype);
 
@@ -180,8 +178,39 @@ int main(int argc, char** argv)
 	std::cout << "After seed generation\n";
 
 	// Dhv needs to be greater than N_FEAT for the orthognality to hold.
+	
+#ifdef OFFLOAD_RP_GEN
+
+	hvtype* rp_matrix_buffer = new hvtype[N_FEAT * Dhv];
+	hvtype* shifted_buffer = new hvtype[N_FEAT * Dhv];
+	hvtype* row_buffer = new hvtype[Dhv];
+
+    void* GenRPMatDAG = __hetero_launch(
+        (void*) gen_rp_matrix<Dhv,  N_FEAT>,
+        4,
+        /* Input Buffers: 3*/ 
+        &rp_seed, sizeof(hvtype) * Dhv,
+        row_buffer, sizeof(hvtype) * Dhv,
+        shifted_buffer, sizeof(hvtype) * (N_FEAT * Dhv),
+        rp_matrix_buffer, sizeof(hvtype) * (N_FEAT * Dhv),
+        /* Output Buffers: 1*/ 
+        1,
+        rp_matrix_buffer, sizeof(hvtype) * (N_FEAT * Dhv)
+    );
+
+    __hetero_wait(GenRPMatDAG);
+
+    free(shifted_buffer);
+    free(row_buffer);
+
+
+
+    //rp_matrix =   *  (__hypermatrix__<Dhv, N_FEAT, hvtype>*) rp_matrix_buffer;
+
+#else
 
 	// Generate the random projection matrix. Dhv rows, N_FEAT cols, so Dhv x N_FEAT.
+	__hypermatrix__<N_FEAT, Dhv, hvtype> rp_matrix_transpose = __hetero_hdc_hypermatrix<N_FEAT, Dhv, hvtype>();
 	__hypervector__<Dhv, hvtype> row = __hetero_hdc_hypervector<Dhv, hvtype>();
 
 	// Each row is just a wrap shift of the seed.
@@ -192,7 +221,10 @@ int main(int argc, char** argv)
 	} 
 
 	// Now transpose in order to be able to multiply with input hv in DFG.
-	rp_matrix = __hetero_hdc_matrix_transpose<N_FEAT, Dhv, hvtype>(rp_matrix_transpose, N_FEAT, Dhv);
+	__hypermatrix__<Dhv, N_FEAT, hvtype> rp_matrix = __hetero_hdc_matrix_transpose<N_FEAT, Dhv, hvtype>(rp_matrix_transpose, N_FEAT, Dhv);
+
+	auto rp_matrix_buffer = &rp_matrix;
+#endif
 
 	// Confirm that there are equal amounts of each label:
 	#if 0
@@ -224,7 +256,7 @@ int main(int argc, char** argv)
 
 		// Encode each input datapoitn
 		void* initialize_DFG = __hetero_launch(
-			(void*) rp_encoding_node_copy<Dhv, N_FEAT>, //FIXME: Make this a copy. 
+			(void*) InitialEncodingDFG<Dhv, N_FEAT>, //FIXME: Make this a copy. 
 			2 + 1,
 			/* Input Buffers: 2*/ 
 			&rp_matrix, rp_matrix_size, //false,
@@ -241,6 +273,7 @@ int main(int argc, char** argv)
 
 		// rp_encoding_node encodes a single encoded_hv, which we then have to accumulate to our big group of classes in class_hv[s].
 
+		// FIXME: Should this be a dfg?? 
 		update_hv =  __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, label);
 		update_hv = __hetero_hdc_sum<Dhv, hvtype>(update_hv, encoded_hv); 
 		__hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, encoded_hv, label); 
@@ -300,6 +333,7 @@ int main(int argc, char** argv)
 
 	std::ofstream training_file("training-classes.txt");
 
+	#if DEBUG
 	for(int i = 0; i < N_CLASS; i++) {
 
 		// Basically, these should be CHANGING for the same class. 
@@ -308,6 +342,7 @@ int main(int argc, char** argv)
 		printf("label: %d\n", i);
 
 	}
+	#endif
 	std::cout << "inference starting" << std::endl;
 
 	// ============ Inference =============== //
@@ -331,9 +366,9 @@ int main(int argc, char** argv)
 				scores_buffer, scores_size,
 				j, 
 				/* Output Buffers: 1*/ 
-				inference_labels + a, sizeof(int),
+				inference_labels + j, sizeof(int),
 				1,
-				inference_labels + a, sizeof(int) //, false
+				inference_labels + j, sizeof(int) //, false
 			);
 			__hetero_wait(DFG); 
 
@@ -348,14 +383,13 @@ int main(int argc, char** argv)
 	mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_elapsed).count();
 
 	std::ofstream myfile("out.txt");
-	for(int i = 0; i < N_TEST; i++){
-		myfile << y_test[i] << " " << inference_labels[i] << std::endl;
-	}
 
 	int correct = 0;
-    	for(int i = 0; i < N_TEST; i++)
-    		if(inference_labels[i] == y_test[i])
-    			correct += 1;
+	for(int i = 0; i < N_TEST; i++) {
+		myfile << y_test[i] << " " << inference_labels[i] << std::endl;
+		if(inference_labels[i] == y_test[i])
+			correct += 1;
+	}
     
 	std::cout << "Test accuracy = " << float(correct)/N_TEST << std::endl;
 

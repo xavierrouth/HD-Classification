@@ -118,6 +118,114 @@ void rp_encoding_node_copy(/* Input Buffers: 2*/
 }
 
 template<int D, int N_FEATURES>
+void InitialEncodingDFG(
+        /* Input Buffers: 2*/
+        __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, // __hypermatrix__<N_FEATURES, D, binary>
+        __hypervector__<N_FEATURES, hvtype>* input_datapoint_ptr, size_t input_datapoint_size, // __hypervector__<N_FEATURES, int> 
+        /* Output Buffers: 1*/
+        __hypervector__<D, hvtype>* output_hv_ptr, size_t output_hv_size) { // __hypervector__<D, binary>
+    
+    void* section = __hetero_section_begin();
+
+    void* task = __hetero_task_begin(
+        /* Input Buffers: 2*/ 3, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size,
+        /* Parameters: 0*/
+        /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size,
+        "initial_encoding_wrapper"
+    );
+    
+    // Specifies that the following node is performing an HDC Encoding step
+    __hetero_hdc_encoding(6, (void*) rp_encoding_node_copy<D, N_FEATURES>, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size);
+
+    __hetero_task_end(task); 
+
+    __hetero_section_end(section);
+    return;
+}
+
+// RP Matrix Node Generation. Performs element wise rotation on ID matrix rows and stores into destination buffer.
+template <int D,  int N_FEATURES>
+void gen_rp_matrix(/* Input Buffers*/
+        __hypervector__<D, hvtype>* rp_seed_vector, size_t  rp_seed_vector_size,
+        __hypervector__<D, hvtype>* row_buffer, size_t  row_buffer_size,
+        __hypermatrix__<N_FEATURES, D, hvtype>* shifted_matrix, size_t  shifted_matrix_size,
+        __hypermatrix__<D, N_FEATURES, hvtype>* transposed_matrix, size_t  transposed_matrix_size
+        ){
+
+
+    void* root_section = __hetero_section_begin();
+
+
+    void* root_task = __hetero_task_begin(
+            /* Num Inputs */ 4,
+         rp_seed_vector,   rp_seed_vector_size,
+         shifted_matrix,   shifted_matrix_size,
+         row_buffer, row_buffer_size,
+         transposed_matrix,   transposed_matrix_size,
+         /* Num Outputs*/ 1,
+         transposed_matrix,   transposed_matrix_size,
+        "gen_root_task"
+    );
+
+    void* wrapper_section = __hetero_section_begin();
+
+
+    {
+    void* gen_shifted_task = __hetero_task_begin(
+         /* Num Inputs */ 3,
+         rp_seed_vector,   rp_seed_vector_size,
+         shifted_matrix,   shifted_matrix_size,
+         row_buffer, row_buffer_size,
+         /* Num Outputs */ 1,
+         shifted_matrix,   shifted_matrix_size,
+         "gen_shifted_matrix_task");
+
+
+    //std::cout << "Gen Shifted Task Begin" <<std::endl;
+	// Each row is just a wrap shift of the seed.
+
+	for (int i = 0; i < N_FEATURES; i++) {
+		__hypervector__<D, hvtype>  row = __hetero_hdc_wrap_shift<D, hvtype>(*rp_seed_vector, i);
+        *row_buffer = row;
+        __hetero_hdc_set_matrix_row<N_FEATURES, D, hvtype>(*shifted_matrix, row, i);
+
+	} 
+
+    //std::cout << "Gen Shifted Task End" <<std::endl;
+
+
+   __hetero_task_end(gen_shifted_task); 
+   }
+
+   {
+    void* transpose_task = __hetero_task_begin(
+         /* Num Inputs */ 2,
+         shifted_matrix,   shifted_matrix_size,
+         transposed_matrix,   transposed_matrix_size,
+         /* Num Outputs */ 1,
+         transposed_matrix,   transposed_matrix_size,
+         "gen_tranpose_task");
+
+    //std::cout << "Transpose Begin" <<std::endl;
+	 *transposed_matrix = __hetero_hdc_matrix_transpose<N_FEATURES, D, hvtype>(*shifted_matrix, N_FEATURES, D);
+
+    //std::cout << "Transpose Task End" <<std::endl;
+
+   __hetero_task_end(transpose_task); 
+   }
+
+
+   __hetero_section_end(wrapper_section);
+
+   __hetero_task_end(root_task); 
+
+   __hetero_section_end(root_section);
+}
+
+
+
+
+template<int D, int N_FEATURES>
 void rp_encoding_node_copy_copy(/* Input Buffers: 2*/
         __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, // __hypermatrix__<N_FEATURES, D, binary>
         __hypervector__<N_FEATURES, hvtype>* input_datapoint_ptr, size_t input_datapoint_size, // __hypervector__<N_FEATURES, int> 
@@ -409,10 +517,9 @@ void classification_node_training_rest(/* Input Buffers: 2 */
     return;
 }
 
-
 // Dimensionality, Clusters, data point vectors, features per.
 template <int D, int K, int N_VEC, int N_FEATURES>
-void training_root_node( /* Input buffers: 3*/ 
+void encoding_and_training_node( /* Input buffers: 3*/ 
                 __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, // __hypermatrix__<N_FEATURES, D, binary>
                 __hypervector__<N_FEATURES, hvtype>* datapoint_vec_ptr, size_t datapoint_vec_size, // Features
                  __hypermatrix__<K, D, hvtype>* classes_ptr, size_t classes_size, // __hypermatrix__<K, D, binary> // Also an output.
@@ -463,7 +570,60 @@ void training_root_node( /* Input buffers: 3*/
 
 // Dimensionality, Clusters, data point vectors, features per.
 template <int D, int K, int N_VEC, int N_FEATURES>
-void inference_root_node( /* Input buffers: 3*/ 
+void training_root_node( /* Input buffers: 3*/ 
+                __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, // __hypermatrix__<N_FEATURES, D, binary>
+                __hypervector__<N_FEATURES, hvtype>* datapoint_vec_ptr, size_t datapoint_vec_size, // Features
+                 __hypermatrix__<K, D, hvtype>* classes_ptr, size_t classes_size, // __hypermatrix__<K, D, binary> // Also an output.
+                /* Local Vars: 3 */
+                __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, // // __hypervector__<D, binary>
+                __hypervector__<K, hvtype>* scores_ptr, size_t scores_size,
+                __hypervector__<D, hvtype>* update_hv_ptr, size_t update_hv_size,  // Used in second stage of clustering node for extracting and accumulating
+                int* argmax_ptr, size_t argmax_size,
+                /* Parameters: 1*/
+                int label
+                /* Output Buffers: 1 (Classes)*/ 
+                ){
+
+    void* root_section = __hetero_section_begin();
+
+    // Re-encode each iteration.
+    void* training_encoding_task = __hetero_task_begin(
+        /* Input Buffers: 3 */ 8, 
+            rp_matrix_ptr, rp_matrix_size, 
+            datapoint_vec_ptr, datapoint_vec_size, 
+            encoded_hv_ptr, encoded_hv_size,  
+            classes_ptr, classes_size, 
+            scores_ptr, scores_size,
+            update_hv_ptr, update_hv_size,
+            argmax_ptr, argmax_size,
+            label,
+        /* Output Buffers: 1 */ 1, 
+        encoded_hv_ptr, encoded_hv_size,
+        "training_encoding_task_wrapper"  
+    );
+
+    __hetero_hdc_training(
+        16,
+        (void*) encoding_and_training_node<D, K, N_VEC, N_FEATURES>,
+        rp_matrix_ptr, rp_matrix_size, 
+        datapoint_vec_ptr, datapoint_vec_size, 
+        classes_ptr, classes_size, 
+        encoded_hv_ptr, encoded_hv_size,  
+        scores_ptr, scores_size,
+        update_hv_ptr, update_hv_size,
+        argmax_ptr, argmax_size,
+        label
+    );
+    
+    __hetero_task_end(training_encoding_task);
+
+    __hetero_section_end(root_section);
+    return;
+}
+
+// Dimensionality, Clusters, data point vectors, features per.
+template <int D, int K, int N_VEC, int N_FEATURES>
+void encoding_and_inference_node( /* Input buffers: 3*/ 
                 __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, // __hypermatrix__<N_FEATURES, D, binary>
                 __hypervector__<N_FEATURES, hvtype>* datapoint_vec_ptr, size_t datapoint_vec_size, // Features
                 __hypermatrix__<K, D, hvtype>* classes_ptr, size_t classes_size, // __hypermatrix__<K, D, binary>
@@ -511,3 +671,54 @@ void inference_root_node( /* Input buffers: 3*/
     __hetero_section_end(root_section);
     return;
 }
+
+// Dimensionality, Clusters, data point vectors, features per.
+template <int D, int K, int N_VEC, int N_FEATURES>
+void inference_root_node( /* Input buffers: 3*/ 
+                __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, // __hypermatrix__<N_FEATURES, D, binary>
+                __hypervector__<N_FEATURES, hvtype>* datapoint_vec_ptr, size_t datapoint_vec_size, // Features
+                __hypermatrix__<K, D, hvtype>* classes_ptr, size_t classes_size, // __hypermatrix__<K, D, binary>
+                /* Local Vars: 2*/
+                __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, // // __hypervector__<D, binary>
+                __hypervector__<K, hvtype>* scores_ptr, size_t scores_size,
+                // FIXME, give scores its own type.
+                /* Parameters: 1*/
+                int encoded_hv_idx,
+                /* Output Buffers: 1*/
+                int* label_ptr, size_t label_size){
+
+    void* root_section = __hetero_section_begin();
+
+    // Re-encode each iteration.
+    void* inference_task = __hetero_task_begin(
+        /* Input Buffers: 3 */ 7, rp_matrix_ptr, rp_matrix_size, 
+                                datapoint_vec_ptr, datapoint_vec_size, 
+                                encoded_hv_ptr, encoded_hv_size,
+                                classes_ptr, classes_size, 
+                                label_ptr, label_size,
+                                scores_ptr, scores_size,
+        /* Parameters: 1 */     encoded_hv_idx,
+        /* Output Buffers: 1 */ 1,encoded_hv_ptr, encoded_hv_size,
+        "inference_task"
+    );
+
+    __hetero_hdc_inference(
+        13,
+        (void*) encoding_and_inference_node<D, K, N_VEC, N_FEATURES>,
+        rp_matrix_ptr, rp_matrix_size, 
+        datapoint_vec_ptr, datapoint_vec_size, 
+        classes_ptr, classes_size, 
+        encoded_hv_ptr, encoded_hv_size,  
+        scores_ptr, scores_size,
+        encoded_hv_idx,
+        label_ptr, label_size
+    );
+
+
+    __hetero_task_end(inference_task);
+
+    __hetero_section_end(root_section);
+    return;
+}
+
+
