@@ -715,10 +715,10 @@ void inference_root_node( /* Input buffers: 3*/
         rp_matrix_ptr, rp_matrix_size, 
         datapoint_vec_ptr, datapoint_vec_size, 
         classes_ptr, classes_size, 
-        encoded_hv_ptr, encoded_hv_size,  
+        label_ptr, label_size,
+        encoded_hv_ptr, encoded_hv_size, //Extra Arguments
         scores_ptr, scores_size,
-        encoded_hv_idx,
-        label_ptr, label_size
+        encoded_hv_idx
     );
 
 
