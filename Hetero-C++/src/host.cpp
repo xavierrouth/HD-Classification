@@ -275,8 +275,10 @@ int main(int argc, char** argv)
 
 		// rp_encoding_node encodes a single encoded_hv, which we then have to accumulate to our big group of classes in class_hv[s].
 
+#if 0
         printf("Encoded Vector %d:\n",i);
 		print_hv<Dhv, hvtype>(encoded_hv);
+#endif
 
 		// accumulate each encoded hv to its corresponding class.
 		// FIXME: Should this be a dfg?? 
@@ -338,7 +340,7 @@ int main(int argc, char** argv)
 
 	}
 
-    #if 1
+    #if 0
     for (int i = 0; i < N_CLASS; i++) {
         __hypervector__<Dhv, hvtype> class_temp = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, i);
         printf("Class Vector %d:\n", i);
