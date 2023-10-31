@@ -61,10 +61,10 @@ void rp_encoding_node(/* Input Buffers: 2*/
     // formal parameters) to enable more of these tasks to become parallel loops.
     *output_hv_ptr = encoded_hv;
     
-    /**
+#ifdef HAMMING_DIST
     __hypervector__<D, hvtype> bipolar_encoded_hv = __hetero_hdc_sign<D, hvtype>(encoded_hv);
     *output_hv_ptr = bipolar_encoded_hv;
-    */
+#endif
 
     __hetero_task_end(task); 
 
@@ -108,10 +108,10 @@ void rp_encoding_node_copy(/* Input Buffers: 2*/
     // formal parameters) to enable more of these tasks to become parallel loops.
     *output_hv_ptr = encoded_hv;
     
-    /*
+#ifdef HAMMING_DIST
     __hypervector__<D, hvtype> bipolar_encoded_hv = __hetero_hdc_sign<D, hvtype>(encoded_hv);
     *output_hv_ptr = bipolar_encoded_hv;
-    */
+#endif
 
     __hetero_task_end(task); 
 
@@ -262,10 +262,11 @@ void rp_encoding_node_copy_copy(/* Input Buffers: 2*/
     // analysis to re-use the same buffer (especially those coming from the
     // formal parameters) to enable more of these tasks to become parallel loops.
     *output_hv_ptr = encoded_hv;
-    /*
+
+#ifdef HAMMING_DIST
     __hypervector__<D, hvtype> bipolar_encoded_hv = __hetero_hdc_sign<D, hvtype>(encoded_hv);
     *output_hv_ptr = bipolar_encoded_hv;
-    */
+#endif
 
     __hetero_task_end(task); 
 
@@ -332,13 +333,14 @@ void __attribute__ ((noinline)) classification_node_inference(
     hvtype max_score = (hvtype) (*scores_ptr)[0][0];
     #endif
     
+    //printf("Printing Scores!\n");
     for (int k = 0; k < K; k++) {
         #ifdef HAMMING_DIST
         hvtype score = (hvtype) D - (*scores_ptr)[0][k];
         #else
         hvtype score = (hvtype) (*scores_ptr)[0][k];
+        //printf("[%d]: %.6f\n", k,score);
         #endif
-        //printf("%.6f ", score);
         ////std::cout << score << " ";
         if (score > max_score) {
             max_score = score;

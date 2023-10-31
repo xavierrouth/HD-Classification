@@ -10,6 +10,8 @@
 #include <cassert>
 #include <cmath>
 
+#define OFFLOAD_RP_GEN 
+
 
 #define DUMP(vec, suffix) {\
   FILE *f = fopen("dump/" #vec suffix, "w");\
@@ -259,7 +261,7 @@ int main(int argc, char** argv)
 			(void*) InitialEncodingDFG<Dhv, N_FEAT>, //FIXME: Make this a copy. 
 			2 + 1,
 			/* Input Buffers: 2*/ 
-			&rp_matrix, rp_matrix_size, //false,
+			rp_matrix_buffer, rp_matrix_size, //false,
 			&datapoint_hv, input_vector_size,
 			/* Output Buffers: 1*/ 
 			&encoded_hv, class_size,  //false,
@@ -273,13 +275,14 @@ int main(int argc, char** argv)
 
 		// rp_encoding_node encodes a single encoded_hv, which we then have to accumulate to our big group of classes in class_hv[s].
 
-		//print_hv<Dhv, hvtype>(encoded_hv);
+        printf("Encoded Vector %d:\n",i);
+		print_hv<Dhv, hvtype>(encoded_hv);
 
 		// accumulate each encoded hv to its corresponding class.
 		// FIXME: Should this be a dfg?? 
 		update_hv =  __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, label);
 		update_hv = __hetero_hdc_sum<Dhv, hvtype>(update_hv, encoded_hv); 
-		__hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, encoded_hv, label); 
+		__hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, update_hv, label); 
 		//print_hv<Dhv, hvtype>(update_hv); //TODO: Maybe there should be a _hdc_sign applied here.
 	}
 
@@ -312,7 +315,7 @@ int main(int argc, char** argv)
 				(void*) training_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>,
 
 				/* Input Buffers: 4*/ 8,
-				&rp_matrix, rp_matrix_size, //false,
+				rp_matrix_buffer, rp_matrix_size, //false,
 				&datapoint_hv, input_vector_size, //true,
 				&classes, classes_size, //false,
 				/* Local Var Buffers 4*/
@@ -333,14 +336,15 @@ int main(int argc, char** argv)
 	
 		}
 
-		#if 0
-		for (int i = 0; i < N_CLASS; i++) {
-			__hypervector__<Dhv, hvtype> class_temp = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, i);
-			std::cout << i << " ";
-			print_hv<Dhv, hvtype>(class_temp);
-		}
-		#endif
 	}
+
+    #if 1
+    for (int i = 0; i < N_CLASS; i++) {
+        __hypervector__<Dhv, hvtype> class_temp = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, i);
+        printf("Class Vector %d:\n", i);
+        print_hv<Dhv, hvtype>(class_temp);
+    }
+    #endif
 
 	std::ofstream training_file("training-classes.txt");
 
@@ -369,7 +373,7 @@ int main(int argc, char** argv)
 			void *DFG = __hetero_launch(
 				(void*) inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>,
 				/* Input Buffers: 3*/ 7,
-				&rp_matrix, rp_matrix_size, //false,
+				rp_matrix_buffer, rp_matrix_size, //false,
 				&datapoint_hv, input_vector_size, //true,
 				&classes, classes_size, //false,
 				/* Local Var Buffers 2*/
