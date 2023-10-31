@@ -17,8 +17,9 @@ typedef float hvtype;
 typedef int hvtype;
 #endif
 
-#define FLIP_SCORE
+//#define FLIP_SCORE
 
+#define BINARY
 
 // RANDOM PROJECTION ENCODING!!
 // Matrix-vector mul
@@ -68,8 +69,10 @@ void rp_encoding_node(/* Input Buffers: 2*/
     // formal parameters) to enable more of these tasks to become parallel loops.
     *output_hv_ptr = encoded_hv;
     
+#ifdef BINARY
     __hypervector__<D, hvtype> bipolar_encoded_hv = __hetero_hdc_sign<D, hvtype>(encoded_hv);
     *output_hv_ptr = bipolar_encoded_hv;
+#endif
 
     __hetero_task_end(task); 
 
@@ -112,9 +115,13 @@ void rp_encoding_node_copy(/* Input Buffers: 2*/
     // analysis to re-use the same buffer (especially those coming from the
     // formal parameters) to enable more of these tasks to become parallel loops.
     *output_hv_ptr = encoded_hv;
-    
+
+
+#ifdef BINARY
     __hypervector__<D, hvtype> bipolar_encoded_hv = __hetero_hdc_sign<D, hvtype>(encoded_hv);
     *output_hv_ptr = bipolar_encoded_hv;
+#endif
+    
 
     __hetero_task_end(task); 
 
@@ -266,8 +273,10 @@ void rp_encoding_node_copy_copy(/* Input Buffers: 2*/
     // formal parameters) to enable more of these tasks to become parallel loops.
     *output_hv_ptr = encoded_hv;
 
+#ifdef BINARY
     __hypervector__<D, hvtype> bipolar_encoded_hv = __hetero_hdc_sign<D, hvtype>(encoded_hv);
     *output_hv_ptr = bipolar_encoded_hv;
+#endif
 
     __hetero_task_end(task); 
 
@@ -336,6 +345,8 @@ void __attribute__ ((noinline)) classification_node_inference(
     }
 
     *scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
+
+    *scores_ptr = __hetero_hdc_absolute_value<K, hvtype>(*scores_ptr);
 
 
     #endif
@@ -483,6 +494,8 @@ void classification_node_training_rest(/* Input Buffers: 2 */
 
     *scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
 
+    *scores_ptr = __hetero_hdc_absolute_value<K, hvtype>(*scores_ptr);
+
     #endif
 
     //std::cout << "after dist metric" << std::endl;
@@ -567,8 +580,10 @@ void classification_node_training_rest(/* Input Buffers: 2 */
 
         // classHV[maxIndex] -= temp_dim;  Subtract from guessed class.
         *update_hv_ptr =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, max_idx);
-        *update_hv_ptr = __hetero_hdc_sign_flip<D, hvtype>(*update_hv_ptr); // May need an instrinsic for this.
-        *update_hv_ptr = __hetero_hdc_sum<D, hvtype>(*update_hv_ptr, *encoded_hv_ptr); // May need an instrinsic for this.
+        *update_hv_ptr = __hetero_hdc_sub<D, hvtype>(*update_hv_ptr, *encoded_hv_ptr); // May need an instrinsic for this.
+
+
+
         __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, max_idx); // How do we normalize?
         //printf("decrement good\n");
     }

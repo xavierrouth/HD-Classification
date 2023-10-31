@@ -21,11 +21,20 @@
 
 template <int N, typename elemTy>
 void print_hv(__hypervector__<N, elemTy> hv) {
+    int num_neg_one = 0;
+    int num_one = 0;
     std::cout << "[";
     for (int i = 0; i < N-1; i++) {
         std::cout << hv[0][i] << ", ";
+        if(hv[0][i] == 1){
+            num_one ++;
+        } else if(hv[0][i] == -1){
+            num_neg_one ++;
+        }
     }
     std::cout << hv[0][N-1] << "]\n";
+
+    std::cout <<"# Negative 1: "<< num_neg_one <<", # Positive 1: "<< num_one << "\n";
     return;
 }
 
@@ -52,7 +61,9 @@ T initialize_rp_seed(size_t loop_index_var) {
 	int i = loop_index_var / 32;
 	int j = loop_index_var % 32;
 
+#if 0
 	//std::cout << i << " " << j << "\n";
+    
 	long double temp = log2(i+2.5) * pow(2, 31);
 	long long int temp2 = (long long int)(temp);
 	temp2 = temp2 % 2147483648;
@@ -63,12 +74,33 @@ T initialize_rp_seed(size_t loop_index_var) {
 
 	//std::cout << ele << "\n";
 
+
 	if (ele) {
 		return (T) 1;
 	}
 	else {
 		return (T) -1;
 	}
+#endif
+
+    double r = ((double) rand() / double(RAND_MAX));
+
+
+    double control = ((double) rand() / double(RAND_MAX));
+
+    double threshold;
+
+    if(control > 0.5){
+        threshold = 0.25;
+    } else {
+        threshold = 0.75;
+    }
+
+    if(r > threshold){
+        return (T) 1;
+    } else {
+        return (T) -1;
+    }
 }
 
 
@@ -175,6 +207,9 @@ int main(int argc, char** argv)
 
 	__hypervector__<Dhv, hvtype> rp_seed = __hetero_hdc_create_hypervector<Dhv, hvtype>(0, (void*) initialize_rp_seed<hvtype>);	
 
+    printf("RP SEED MATRIX\n");
+    print_hv<Dhv, hvtype>(rp_seed);
+
 	std::cout << "Dimension over 32: " << Dhv/32 << std::endl;
 	//We need a seed ID. To generate in a random yet determenistic (for later debug purposes) fashion, we use bits of log2 as some random stuff.
 
@@ -209,8 +244,20 @@ int main(int argc, char** argv)
     free(row_buffer);
 
 
+#if 0
+    for(int d = 0; d < Dhv; d++){
+        __hypermatrix__<Dhv, N_FEAT, hvtype>* rp_ptr = (__hypermatrix__<Dhv, N_FEAT, hvtype>*) rp_matrix_buffer;
+        auto row = __hetero_hdc_get_matrix_row<Dhv,N_FEAT, hvtype>(*rp_ptr , Dhv, N_FEAT, d);
 
-    //rp_matrix =   *  (__hypermatrix__<Dhv, N_FEAT, hvtype>*) rp_matrix_buffer;
+        printf("RP MATRIX ROW %d:\n", d);
+        print_hv<N_FEAT, hvtype>(row);
+
+
+    }
+
+
+#endif
+
 
 #else
 
@@ -279,9 +326,10 @@ int main(int argc, char** argv)
 		// rp_encoding_node encodes a single encoded_hv, which we then have to accumulate to our big group of classes in class_hv[s].
 
 #if 0
-        printf("Encoded Vector %d:\n",i);
-		print_hv<Dhv, hvtype>(encoded_hv);
+        printf("Initial Encoding for [HV %d]\n",i);
+        print_hv<Dhv, hvtype>(encoded_hv);
 #endif
+
 
 		// accumulate each encoded hv to its corresponding class.
 		// FIXME: Should this be a dfg?? 
