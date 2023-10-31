@@ -11,7 +11,14 @@
 #undef K
 
 typedef int binary;
+#ifndef HAMMING_DIST
 typedef float hvtype;
+#else
+typedef int hvtype;
+#endif
+
+#define FLIP_SCORE
+
 
 // RANDOM PROJECTION ENCODING!!
 // Matrix-vector mul
@@ -278,6 +285,7 @@ void __attribute__ ((noinline)) classification_node_inference(
     __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, // __hypervector__<D, binary>
     __hypermatrix__<K, D, hvtype>* classes_ptr, size_t classes_size, // __hypermatrix__<K, D, binary>
     __hypervector__<K, hvtype>* scores_ptr, size_t scores_size, // Used as Local var.
+    __hypervector__<K, hvtype>* norms_ptr, size_t norms_size, // Used as Local var.
     int encoded_hv_idx,
     int* label_ptr, size_t label_size ) {   
     // Read classes hvs from host.
@@ -287,7 +295,7 @@ void __attribute__ ((noinline)) classification_node_inference(
      void* section = __hetero_section_begin();
 
     void* task1 = __hetero_task_begin(
-        /* Input Buffers: */ 3, encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size, scores_ptr, scores_size, 
+        /* Input Buffers: */ 4, encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size, scores_ptr, scores_size, norms_ptr, norms_size, 
         /* Output Buffers: */ 1, scores_ptr, scores_size, "inference_calculate_score_task"
     );
 
@@ -305,10 +313,34 @@ void __attribute__ ((noinline)) classification_node_inference(
     *scores_ptr =  __hetero_hdc_hamming_distance<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
     //////printf("after hamming_dist\n");
     #else
-    ////printf("before cossim\n");
+#if 0
+    /* Cosine Smilarity Based Score */
     *scores_ptr = __hetero_hdc_cossim<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
-    //////printf("after cossim\n");
+#endif
+
+    
+
+    *norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
+
+    //printf("Printing Norms!\n");
+    for (int k = 0; k < K; k++) {
+        hvtype norm = (hvtype) (*norms_ptr)[0][k];
+        //printf("[%d]: %.6f\n", k,norm);
+    }
+    *scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
+
+    //printf("Printing Scores PRE!\n");
+    for (int k = 0; k < K; k++) {
+        hvtype norm = (hvtype) (*scores_ptr)[0][k];
+        //printf("[%d]: %.6f\n", k,norm);
+    }
+
+    *scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
+
+
     #endif
+
+
 
     __hetero_task_end(task1);
 
@@ -325,8 +357,11 @@ void __attribute__ ((noinline)) classification_node_inference(
     hvtype max_score = (hvtype) D - (*scores_ptr)[0][0]; // I think this is probably causing issues.
     #else
     hvtype max_score = (hvtype) (*scores_ptr)[0][0];
-    if(max_score < 0) max_score = max_score * -1.0;
     #endif
+
+#ifdef FLIP_SCORE
+    if(max_score < 0) max_score = max_score * -1.0;
+#endif
     
     //printf("Printing Scores!\n");
     for (int k = 0; k < K; k++) {
@@ -338,7 +373,9 @@ void __attribute__ ((noinline)) classification_node_inference(
         #endif
         ////std::cout << score << " ";
 
+#ifdef FLIP_SCORE
         if(score < 0) score = score * -1.0;
+#endif
         if (score > max_score) {
             max_score = score;
             max_idx = k;
@@ -398,6 +435,7 @@ void classification_node_training_rest(/* Input Buffers: 2 */
     __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size,
     __hypermatrix__<K, D, hvtype>* classes_ptr, size_t classes_size, // Do we need a separate buffer or can we edit in place. We can edit in place. 
     __hypervector__<K, hvtype>* scores_ptr, size_t scores_size, // Used as Local var.
+    __hypervector__<K, hvtype>* norms_ptr, size_t norms_size, // Used as Local var.
     __hypervector__<D, hvtype>* update_hv_ptr, size_t update_hv_size,  // Used in second stage of clustering node for extracting and accumulating
     int* argmax, size_t argmax_size,
     int label ) {
@@ -408,7 +446,7 @@ void classification_node_training_rest(/* Input Buffers: 2 */
     void* section = __hetero_section_begin();
 
     void* task1 = __hetero_task_begin(
-        /* Input Buffers: */ 3, encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size, scores_ptr, scores_size, 
+        /* Input Buffers: */ 4, encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size, scores_ptr, scores_size, norms_ptr, norms_size, 
         /* Output Buffers: */ 1, scores_ptr, scores_size, "training_rest_scoring_task"
     );
     // Class HVs are created via 'clustering' on +1, -1 encoded hypervectors. (loop 269).
@@ -422,7 +460,29 @@ void classification_node_training_rest(/* Input Buffers: 2 */
     #ifdef HAMMING_DIST
     *scores_ptr =  __hetero_hdc_hamming_distance<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
     #else
+#if 0
     *scores_ptr = __hetero_hdc_cossim<K, D, hvtype>(encoded_hv, classes);
+#endif
+
+
+
+    *norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
+
+    //printf("Printing Norms!\n");
+    for (int k = 0; k < K; k++) {
+        hvtype norm = (hvtype) (*norms_ptr)[0][k];
+        //printf("[%d]: %.6f\n", k,norm);
+    }
+    *scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
+
+    //printf("Printing Scores PRE!\n");
+    for (int k = 0; k < K; k++) {
+        hvtype norm = (hvtype) (*scores_ptr)[0][k];
+        //printf("[%d]: %.6f\n", k,norm);
+    }
+
+    *scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
+
     #endif
 
     //std::cout << "after dist metric" << std::endl;
@@ -444,9 +504,11 @@ void classification_node_training_rest(/* Input Buffers: 2 */
         hvtype max_score = (hvtype) D - (*scores_ptr)[0][0]; // I think this is probably causing issues.
         #else
         hvtype max_score = (hvtype) (*scores_ptr)[0][0];
-        if(max_score < 0) max_score = max_score * -1.0;
         #endif
         
+#ifdef FLIP_SCORE
+        if(max_score < 0) max_score = max_score * -1.0;
+#endif
         //printf("Printing scores: \n");
         //std::cout << "good scores access" << std::endl;
         for (int k = 0; k < K; k++) {
@@ -458,7 +520,9 @@ void classification_node_training_rest(/* Input Buffers: 2 */
             //printf("%.6f  ", score);
             ////std::cout << score << " ";
 
+#ifdef FLIP_SCORE
             if(score < 0) score = score * -1.0;
+#endif
             if (score > max_score) {
                 max_score = score;
                 *argmax = k;
@@ -533,6 +597,7 @@ void encoding_and_training_node( /* Input buffers: 3*/
                 /* Local Vars: 3 */
                 __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, // // __hypervector__<D, binary>
                 __hypervector__<K, hvtype>* scores_ptr, size_t scores_size,
+                __hypervector__<K, hvtype>* norms_ptr, size_t norms_size,
                 __hypervector__<D, hvtype>* update_hv_ptr, size_t update_hv_size,  // Used in second stage of clustering node for extracting and accumulating
                 int* argmax_ptr, size_t argmax_size,
                 /* Parameters: 1*/
@@ -556,10 +621,11 @@ void encoding_and_training_node( /* Input buffers: 3*/
     __hetero_task_end(encoding_task);
 
     void* training_task = __hetero_task_begin(
-        /* Input Buffers: 5 */  5 + 1, 
+        /* Input Buffers: 6 */  6 + 1, 
                                 encoded_hv_ptr, encoded_hv_size, 
                                 classes_ptr, classes_size, 
                                 scores_ptr, scores_size,
+                                norms_ptr, norms_size,
                                 update_hv_ptr, update_hv_size,
                                 argmax_ptr, argmax_size,
                                 label,
@@ -567,7 +633,7 @@ void encoding_and_training_node( /* Input buffers: 3*/
         "training_task"  
     );
 
-    classification_node_training_rest<D, K, N_VEC>(encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size, scores_ptr, scores_size, update_hv_ptr, update_hv_size, argmax_ptr, argmax_size, label); 
+    classification_node_training_rest<D, K, N_VEC>(encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size, scores_ptr, scores_size, norms_ptr, norms_size,  update_hv_ptr, update_hv_size, argmax_ptr, argmax_size, label); 
 
     __hetero_task_end(training_task);
 
@@ -584,6 +650,7 @@ void training_root_node( /* Input buffers: 3*/
                 /* Local Vars: 3 */
                 __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, // // __hypervector__<D, binary>
                 __hypervector__<K, hvtype>* scores_ptr, size_t scores_size,
+                __hypervector__<K, hvtype>* norms_ptr, size_t norms_size,
                 __hypervector__<D, hvtype>* update_hv_ptr, size_t update_hv_size,  // Used in second stage of clustering node for extracting and accumulating
                 int* argmax_ptr, size_t argmax_size,
                 /* Parameters: 1*/
@@ -595,12 +662,13 @@ void training_root_node( /* Input buffers: 3*/
 
     // Re-encode each iteration.
     void* training_encoding_task = __hetero_task_begin(
-        /* Input Buffers: 3 */ 8, 
+        /* Input Buffers: 3 */ 9, 
             rp_matrix_ptr, rp_matrix_size, 
             datapoint_vec_ptr, datapoint_vec_size, 
             encoded_hv_ptr, encoded_hv_size,  
             classes_ptr, classes_size, 
             scores_ptr, scores_size,
+            norms_ptr, norms_size,
             update_hv_ptr, update_hv_size,
             argmax_ptr, argmax_size,
             label,
@@ -610,13 +678,14 @@ void training_root_node( /* Input buffers: 3*/
     );
 
     __hetero_hdc_training(
-        16,
+        18,
         (void*) encoding_and_training_node<D, K, N_VEC, N_FEATURES>,
         rp_matrix_ptr, rp_matrix_size, 
         datapoint_vec_ptr, datapoint_vec_size, 
         classes_ptr, classes_size, 
         encoded_hv_ptr, encoded_hv_size,  
         scores_ptr, scores_size,
+        norms_ptr, norms_size,
         update_hv_ptr, update_hv_size,
         argmax_ptr, argmax_size,
         label
@@ -638,6 +707,7 @@ void encoding_and_inference_node( /* Input buffers: 3*/
                 /* Local Vars: 2*/
                 __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, // // __hypervector__<D, binary>
                 __hypervector__<K, hvtype>* scores_ptr, size_t scores_size,
+                __hypervector__<K, hvtype>* norms_ptr, size_t norms_size,
                 // FIXME, give scores its own type.
                 /* Parameters: 1*/
                 int encoded_hv_idx
@@ -662,17 +732,18 @@ void encoding_and_inference_node( /* Input buffers: 3*/
     __hetero_task_end(encoding_task);
 
     void* inference_task = __hetero_task_begin(
-        /* Input Buffers: 5 */  4 + 1, 
+        /* Input Buffers: 5 */  5 + 1, 
                                 encoded_hv_ptr, encoded_hv_size, 
                                 classes_ptr, classes_size, 
                                 label_ptr, label_size,
                                 scores_ptr, scores_size,
+                                norms_ptr, norms_size,
         /* Parameters: 1 */     encoded_hv_idx,
         /* Output Buffers: 1 */ 1, label_ptr, label_size,
         "inference_task"  
     );
 
-    classification_node_inference<D, K, N_VEC>(encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size, scores_ptr, scores_size, encoded_hv_idx, label_ptr, label_size); 
+    classification_node_inference<D, K, N_VEC>(encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size, scores_ptr, scores_size,norms_ptr, norms_size , encoded_hv_idx, label_ptr, label_size); 
 
     __hetero_task_end(inference_task);
 
@@ -689,6 +760,7 @@ void inference_root_node( /* Input buffers: 3*/
                 /* Local Vars: 2*/
                 __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, // // __hypervector__<D, binary>
                 __hypervector__<K, hvtype>* scores_ptr, size_t scores_size,
+                __hypervector__<K, hvtype>* norms_ptr, size_t norms_size,
                 // FIXME, give scores its own type.
                 /* Parameters: 1*/
                 int encoded_hv_idx,
@@ -699,19 +771,22 @@ void inference_root_node( /* Input buffers: 3*/
 
     // Re-encode each iteration.
     void* inference_task = __hetero_task_begin(
-        /* Input Buffers: 3 */ 7, rp_matrix_ptr, rp_matrix_size, 
-                                datapoint_vec_ptr, datapoint_vec_size, 
-                                encoded_hv_ptr, encoded_hv_size,
-                                classes_ptr, classes_size, 
-                                label_ptr, label_size,
-                                scores_ptr, scores_size,
-        /* Parameters: 1 */     encoded_hv_idx,
-        /* Output Buffers: 1 */ 1,encoded_hv_ptr, encoded_hv_size,
-        "inference_task"
-    );
+            /* Input Buffers: 3 */ 8, 
+            rp_matrix_ptr, rp_matrix_size, 
+            datapoint_vec_ptr, datapoint_vec_size, 
+            encoded_hv_ptr, encoded_hv_size,
+            classes_ptr, classes_size, 
+            label_ptr, label_size,
+            scores_ptr, scores_size,
+            norms_ptr, norms_size,
+            encoded_hv_idx,
+            /* Output Buffers: 1 */ 1,encoded_hv_ptr, encoded_hv_size,
+            "inference_task"
+            );
+
 
     __hetero_hdc_inference(
-        13,
+        15,
         (void*) encoding_and_inference_node<D, K, N_VEC, N_FEATURES>,
         rp_matrix_ptr, rp_matrix_size, 
         datapoint_vec_ptr, datapoint_vec_size, 
@@ -719,6 +794,7 @@ void inference_root_node( /* Input buffers: 3*/
         label_ptr, label_size,
         encoded_hv_ptr, encoded_hv_size, //Extra Arguments
         scores_ptr, scores_size,
+        norms_ptr, norms_size,
         encoded_hv_idx
     );
 

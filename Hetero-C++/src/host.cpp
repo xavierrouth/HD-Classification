@@ -164,6 +164,9 @@ int main(int argc, char** argv)
 	hvtype* scores_buffer = new hvtype[N_CLASS];
 	size_t scores_size = N_CLASS * sizeof(hvtype);
 
+	hvtype* norms_buffer = new hvtype[N_CLASS];
+	size_t norms_size = N_CLASS * sizeof(hvtype);
+
 	// Encoding matrix: First we write into rp_matrix_transpose, then transpose it to get rp_matrix,
 	// which is the correct dimensions for encoding input features.
 
@@ -316,13 +319,14 @@ int main(int argc, char** argv)
 
 				(void*) training_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>,
 
-				/* Input Buffers: 4*/ 8,
+				/* Input Buffers: 4*/ 9,
 				rp_matrix_buffer, rp_matrix_size, //false,
 				&datapoint_hv, input_vector_size, //true,
 				&classes, classes_size, //false,
 				/* Local Var Buffers 4*/
 				encoded_hv_buffer, encoded_hv_size,// false,
 				scores_buffer, scores_size,
+				norms_buffer, norms_size,
                 &update_hv, update_hv_size,
 				&argmax[0], sizeof(int),
 				training_labels[j], 
@@ -337,6 +341,15 @@ int main(int argc, char** argv)
 			//printf("after training root launch\n");
 	
 		}
+
+
+        /*
+        // TEMPORARY UPDATE
+        for(int l =0 ; l < N_CLASS; l++){
+            update_hv =  __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, l);
+            update_hv = __hetero_hdc_sign<Dhv, hvtype>(update_hv); 
+            __hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, update_hv, l); 
+        }*/
 
 	}
 
@@ -374,13 +387,14 @@ int main(int argc, char** argv)
 			// Root node is: Encoding -> classing for a single HV.
 			void *DFG = __hetero_launch(
 				(void*) inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>,
-				/* Input Buffers: 3*/ 7,
+				/* Input Buffers: 3*/ 8,
 				rp_matrix_buffer, rp_matrix_size, //false,
 				&datapoint_hv, input_vector_size, //true,
 				&classes, classes_size, //false,
 				/* Local Var Buffers 2*/
 				encoded_hv_buffer, encoded_hv_size,// false,
 				scores_buffer, scores_size,
+				norms_buffer, norms_size,
 				j, 
 				/* Output Buffers: 1*/ 
 				inference_labels + j, sizeof(int),
