@@ -21,6 +21,24 @@ typedef int hvtype;
 
 //#define BINARY
 
+template <int N, typename elemTy>
+void print_hv_alt(__hypervector__<N, elemTy> hv) {
+    int num_neg_one = 0;
+    int num_one = 0;
+    std::cout << "[";
+    for (int i = 0; i < N-1; i++) {
+        std::cout << hv[0][i] << ", ";
+        if(hv[0][i] == 1){
+            num_one ++;
+        } else if(hv[0][i] == -1){
+            num_neg_one ++;
+        }
+    }
+    std::cout << hv[0][N-1] << "]\n";
+
+    std::cout <<"# Negative 1: "<< num_neg_one <<", # Positive 1: "<< num_one << "\n";
+    return;
+}
 
 // RANDOM PROJECTION ENCODING!!
 // Matrix-vector mul
@@ -365,10 +383,11 @@ void __attribute__ ((noinline)) classification_node_inference(
     __hypervector__<K, hvtype> scores = *scores_ptr;
     int max_idx = 0;
     
+    hvtype* scores_elem_ptr = (hvtype*) scores_ptr;
     #ifdef HAMMING_DIST
-    hvtype max_score = (hvtype) D - (*scores_ptr)[0][0]; // I think this is probably causing issues.
+    hvtype max_score = (hvtype) D - scores_elem_ptr[0]; // I think this is probably causing issues.
     #else
-    hvtype max_score = (hvtype) (*scores_ptr)[0][0];
+    hvtype max_score = (hvtype) scores_elem_ptr[0];
     #endif
 
 #ifdef FLIP_SCORE
@@ -378,9 +397,9 @@ void __attribute__ ((noinline)) classification_node_inference(
     //printf("Printing Scores!\n");
     for (int k = 0; k < K; k++) {
         #ifdef HAMMING_DIST
-        hvtype score = (hvtype) D - (*scores_ptr)[0][k];
+        hvtype score = (hvtype) D - scores_elem_ptr[k];
         #else
-        hvtype score = (hvtype) (*scores_ptr)[0][k];
+        hvtype score = (hvtype) scores_elem_ptr[k];
         //printf("[%d]: %.6f\n", k,score);
         #endif
         ////std::cout << score << " ";
@@ -480,22 +499,32 @@ void classification_node_training_rest(/* Input Buffers: 2 */
 
     *norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
 
-    //printf("Printing Norms!\n");
+    printf("Printing Norms!\n");
     for (int k = 0; k < K; k++) {
         hvtype norm = (hvtype) (*norms_ptr)[0][k];
         //printf("[%d]: %.6f\n", k,norm);
     }
-    *scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
+    //print_hv_alt<K, hvtype>(*norms_ptr);
 
-    //printf("Printing Scores PRE!\n");
+    *scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
+#if 0
+    printf("Printing Product !\n");
+
+    hvtype* BasePointer = (hvtype*) (scores_ptr);
     for (int k = 0; k < K; k++) {
-        hvtype norm = (hvtype) (*scores_ptr)[0][k];
-        //printf("[%d]: %.6f\n", k,norm);
+        hvtype prod = BasePointer[k];
+        printf("[%d]: %.6f\n", k,prod);
     }
 
+    print_hv_alt<K, hvtype>(*scores_ptr);
+#endif
     *scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
 
     *scores_ptr = __hetero_hdc_absolute_value<K, hvtype>(*scores_ptr);
+#if 0
+    printf("Scores post\n");
+    print_hv_alt<K, hvtype>(*scores_ptr);
+#endif
 
     #endif
 
@@ -514,24 +543,25 @@ void classification_node_training_rest(/* Input Buffers: 2 */
 
         *argmax = 0;
         
+        hvtype* scores_elem_ptr = (hvtype*) scores_ptr;
         #ifdef HAMMING_DIST
-        hvtype max_score = (hvtype) D - (*scores_ptr)[0][0]; // I think this is probably causing issues.
+        hvtype max_score = (hvtype) D - scores_elem_ptr[0]; // I think this is probably causing issues.
         #else
-        hvtype max_score = (hvtype) (*scores_ptr)[0][0];
+        hvtype max_score = (hvtype) scores_elem_ptr[0];
         #endif
         
 #ifdef FLIP_SCORE
         if(max_score < 0) max_score = max_score * -1.0;
 #endif
-        //printf("Printing scores: \n");
+        printf("Printing scores: \n");
         //std::cout << "good scores access" << std::endl;
         for (int k = 0; k < K; k++) {
             #ifdef HAMMING_DIST
-            hvtype score = (hvtype) D - (*scores_ptr)[0][k];
+            hvtype score = (hvtype) D - scores_elem_ptr[k];
             #else
-            hvtype score = (hvtype) (*scores_ptr)[0][k];
+            hvtype score = (hvtype) scores_elem_ptr[k];
             #endif
-            //printf("%.6f  ", score);
+            printf("%.6f\n", score);
             ////std::cout << score << " ";
 
 #ifdef FLIP_SCORE
@@ -567,19 +597,11 @@ void classification_node_training_rest(/* Input Buffers: 2 */
     );  
 
     int max_idx = *argmax;
-    //printf("%d ", max_idx);
+    printf("Training Label predicted %d\n", max_idx);
     // Update the correct and mispredicted class
     if (label != max_idx) {  // incorrect prediction)
-        // FIXME: May need to recude to bipolar encoding? 
-        // temp_dim = bipolar_encoding(encoded_hv); 
-
-        // classHV[label]  += temp_dim;  Add to actual class.
         
         *update_hv_ptr =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, label);
-
-        // Update encoding vector to binarize for update step
-        
-        *encoded_hv_ptr = __hetero_hdc_sign<D, hvtype>(*encoded_hv_ptr); 
         *update_hv_ptr = __hetero_hdc_sum<D, hvtype>(*update_hv_ptr, *encoded_hv_ptr); // May need an instrinsic for this.
         __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, label); // How do we normalize?
         //printf("increment good\n");
@@ -587,9 +609,6 @@ void classification_node_training_rest(/* Input Buffers: 2 */
         // classHV[maxIndex] -= temp_dim;  Subtract from guessed class.
         *update_hv_ptr =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, max_idx);
         *update_hv_ptr = __hetero_hdc_sub<D, hvtype>(*update_hv_ptr, *encoded_hv_ptr); // May need an instrinsic for this.
-
-
-
         __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, max_idx); // How do we normalize?
         //printf("decrement good\n");
     }

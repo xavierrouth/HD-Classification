@@ -407,7 +407,7 @@ int main(int argc, char** argv)
 	for (int i = 0; i < N_SAMPLE; i++) {
 		__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + (i * N_FEAT_PAD));
 
-        if(i == 0){
+        if(i == 1){
             std::cout << "Training point 0:"<<"\n";
             print_hv<N_FEAT, hvtype>(datapoint_hv);
         }
@@ -433,7 +433,7 @@ int main(int argc, char** argv)
 
 #if 1
 
-        if(i == 0){
+        if(i <= 1){
             printf("Initial Encoding for [HV %d]\n",i);
             print_hv<Dhv, hvtype>(encoded_hv);
         }
@@ -454,10 +454,10 @@ int main(int argc, char** argv)
 
 	std::cout << "Done init class hvs:" << std::endl;
 
-	#if 0
+	#if 1
 	for (int i = 0; i < N_CLASS; i++) {
 		__hypervector__<Dhv, hvtype> class_temp = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, i);
-		std::cout << "Class HV "<<i << " ";
+		std::cout << "Initial Class HV "<<i << " ";
 		print_hv<Dhv, hvtype>(class_temp);
 	}
 	#endif
@@ -483,6 +483,9 @@ int main(int argc, char** argv)
 		for (int j = 0; j < N_SAMPLE; j++) {
 #endif
 
+
+
+            if(j == 1) break;
 			//printf("before creat hv\n");
 			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + (j * N_FEAT_PAD));
 
@@ -526,27 +529,17 @@ int main(int argc, char** argv)
 
 	}
 
+    std::cout << "Post Training Class HV"<<"\n";
     #if 1
-    for (int i = 0; i < N_CLASS; i++) {
-        if(i != 0) continue;
-        __hypervector__<Dhv, hvtype> class_temp = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, i);
-        printf("Class Vector %d:\n", i);
+    for (int n = 0; n < N_CLASS; n++) {
+        __hypervector__<Dhv, hvtype> class_temp = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, n);
+        printf("Class Vector %d:\n", n);
         print_hv<Dhv, hvtype>(class_temp);
     }
     #endif
 
 	std::ofstream training_file("training-classes.txt");
 
-	#if DEBUG
-	for(int i = 0; i < N_CLASS; i++) {
-
-		// Basically, these should be CHANGING for the same class. 
-		update_hv = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, i);
-		print_hv<Dhv, hvtype>(update_hv);
-		printf("label: %d\n", i);
-
-	}
-	#endif
 	std::cout << "inference starting" << std::endl;
 
 	// ============ Inference =============== //
