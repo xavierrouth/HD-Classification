@@ -78,14 +78,12 @@ void datasetFloatRead(std::vector<float> &data, std::string path){
 
 template <typename T>
 T initialize_hv(T* datapoint_vector, size_t loop_index_var) {
-	//std::cout << ((float*)datapoint_vector)[loop_index_var] << "\n";
 	return datapoint_vector[loop_index_var];
 }
 
 
 template <typename T>
 T initialize_rp(T* datapoint_vector, size_t loop_index_var) {
-	//std::cout << ((float*)datapoint_vector)[loop_index_var] << "\n";
 	return datapoint_vector[loop_index_var];
 }
 
@@ -99,40 +97,14 @@ T initialize_rp_seed(size_t loop_index_var) {
 	long double temp = log2(i+2.5) * pow(2, 31);
 	long long int temp2 = (long long int)(temp);
 	temp2 = temp2 % 2147483648;
-	//temp2 = temp2 % int(pow(2, 31));
-	//2147483648;
 
 	int ele = temp2 & (0x01 << j); //temp2 && (0x01 << j);
-
-	//std::cout << ele << "\n";
-
-
 	if (ele) {
 		return (T) 1;
 	}
 	else {
 		return (T) -1;
 	}
-#if 0
-    double r = ((double) rand() / double(RAND_MAX));
-
-
-    double control = ((double) rand() / double(RAND_MAX));
-
-    double threshold;
-
-    if(control > 0.5){
-        threshold = 0.25;
-    } else {
-        threshold = 0.75;
-    }
-
-    if(r > threshold){
-        return (T) 1;
-    } else {
-        return (T) -1;
-    }
-#endif
 }
 
 
@@ -185,32 +157,9 @@ int main(int argc, char** argv)
     }
 
 #endif
-
-	// FIXME, run inference on training dataset and make sure we get 100% accuracy.
-	//datasetBinaryRead(X_test, X_train_path);
-	//datasetBinaryRead(y_test, y_train_path);
-
-
-
-    std::cout << "\n";
-
     size_t X_train_samples = X_train.size() / N_FEAT_PAD;
 
     assert(X_train_samples == y_train.size() && "Incorrect number of training labels");
-#if 0
-
-    std::cout << "Printing X Train Vectors :\n";
-	for (int i = 0; i < X_train.size(); i+= N_FEAT_PAD) {
-        for(int j = 0; j < N_FEAT;j++){
-            size_t index = i + j;
-            //std::cout << "Index:" << index << " Vector size: "<< X_train.size() << "\n";
-            //assert(index < X_train.size() && "Out of bounds!");
-            auto x_point = X_train[index];
-            std::cout << x_point << " ";
-        }
-        std::cout <<"\n";
-	}
-#endif
 	std::cout << "\n" << "Read Data Starting" << std::endl;
 
 	srand(0);
@@ -224,18 +173,9 @@ int main(int argc, char** argv)
 	std::cout << "Training Samples: "<<N_SAMPLE<<"\n";
 	std::cout << "Test Samples: "<<N_TEST<<"\n";
 	
-	// TRAINING DATA INITIALZIATION
-	// FIXME: Should probably remove padding here, not durin gnode launches. 
 	std::vector<hvtype> temp_vec(X_train.begin(), X_train.end());
 	hvtype* training_input_vectors = temp_vec.data();
 
-    printf("Printing training data point 0:\n");
-    for(int i = 0; i < N_FEAT; i++){
-        std::cout<<training_input_vectors[i]<<" ";
-
-    }
-    std::cout<<"\n";
-    std::cout << "Label 0: "<< y_train[0]<<"\n";
 	// N_FEAT is number of entries per vector
 	size_t input_vector_size = N_FEAT * sizeof(hvtype); // Size of a single vector
 
@@ -302,17 +242,11 @@ int main(int argc, char** argv)
 	__hypervector__<Dhv, hvtype> rp_seed = __hetero_hdc_create_hypervector<Dhv, hvtype>(0, (void*) initialize_rp_seed<hvtype>);	
 
 
-	std::cout << "Dimension over 32: " << Dhv/32 << std::endl;
-	//We need a seed ID. To generate in a random yet determenistic (for later debug purposes) fashion, we use bits of log2 as some random stuff.
-
-	std::cout << "Seed hv:\n";
-	//print_hv<Dhv, hvtype>(rp_seed);
 	std::cout << "After seed generation\n";
 
 	// Dhv needs to be greater than N_FEAT for the orthognality to hold.
 	
 #ifdef OFFLOAD_RP_GEN
-
 	hvtype* rp_matrix_buffer = new hvtype[N_FEAT * Dhv];
 	hvtype* shifted_buffer = new hvtype[N_FEAT * Dhv];
 	hvtype* row_buffer = new hvtype[Dhv];
@@ -336,21 +270,6 @@ int main(int argc, char** argv)
     free(row_buffer);
 
 
-#if 0
-    for(int d = 0; d < Dhv; d++){
-        __hypermatrix__<Dhv, N_FEAT, hvtype>* rp_ptr = (__hypermatrix__<Dhv, N_FEAT, hvtype>*) rp_matrix_buffer;
-        auto row = __hetero_hdc_get_matrix_row<Dhv,N_FEAT, hvtype>(*rp_ptr , Dhv, N_FEAT, d);
-
-        printf("RP MATRIX ROW %d:\n", d);
-        print_hv<N_FEAT, hvtype>(row);
-
-
-    }
-
-
-#endif
-
-
 #else
     std::cout << "Reading RP Matrix from file" <<"\n";
     std::vector<int> rp_mat_read;
@@ -362,71 +281,21 @@ int main(int argc, char** argv)
     while(InFile >> number)
         rp_mat_read.push_back(number);
 
-    std::cout << "First 10 values int\n";
-    for(int k = 0; k < 10; k++){
-        std::cout << rp_mat_read[k] << " ";
-    }
-    std::cout << "\n";
-
 	std::vector<hvtype> temp_rp(rp_mat_read.begin(), rp_mat_read.end());
-    std::cout << "First 10 values \n";
-    for(int k = 0; k < 10; k++){
-        std::cout << temp_rp[k] << " ";
-    }
-    std::cout << "\n";
 
     hvtype* rp_input_vectors = temp_rp.data();
   __hypermatrix__<Dhv, N_FEAT, hvtype> rp_matrix =__hetero_hdc_create_hypermatrix<Dhv, N_FEAT, hvtype>(1, (void*) initialize_rp<hvtype>, rp_input_vectors);
     auto rp_matrix_buffer = &rp_matrix;
 
-#if 1
-    for(int d = 0; d < Dhv; d++){
-        __hypermatrix__<Dhv, N_FEAT, hvtype>* rp_ptr = (__hypermatrix__<Dhv, N_FEAT, hvtype>*) rp_matrix_buffer;
-        auto row = __hetero_hdc_get_matrix_row<Dhv,N_FEAT, hvtype>(*rp_ptr , Dhv, N_FEAT, d);
-
-        printf("RP MATRIX ROW %d:\n", d);
-        print_hv<N_FEAT, hvtype>(row);
-
-
-    }
-
-
 #endif
-
-#endif
-
-	// Confirm that there are equal amounts of each label:
-	#if 0
-	int counts [N_CLASS];
-
-	for (int i = 0; i < N_CLASS; i++) {
-		counts[i] = 0;
-	}
-
-	for (int i = 0; i < N_SAMPLE; i++) {
-		int idx = training_labels[i];
-		counts[idx] += 1;
-	}
-
-	for (int i = 0; i < N_CLASS; i++) {
-		std::cout << i << " " << counts[i] <<std::endl;
-	}
-	#endif
 
 
 	// ============ Training ===============
 
 	// Initialize class hvs.
-	// FIXME: Verify that the classes matrix is set to 0 by the compiler.
 	std::cout << "Init class hvs:" << std::endl;
-	// TODO: Move to DAG.
 	for (int i = 0; i < N_SAMPLE; i++) {
 		__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + (i * N_FEAT_PAD));
-
-        if(i == 1){
-            std::cout << "Training point 0:"<<"\n";
-            print_hv<N_FEAT, hvtype>(datapoint_hv);
-        }
 
 		// Encode each input datapoitn
 		void* initialize_DFG = __hetero_launch(
@@ -445,38 +314,14 @@ int main(int argc, char** argv)
 
 		int label = training_labels[i];
 
-		// rp_encoding_node encodes a single encoded_hv, which we then have to accumulate to our big group of classes in class_hv[s].
-
-#if 1
-
-        if(i <= 1){
-            printf("Initial Encoding for [HV %d]\n",i);
-            print_hv<Dhv, hvtype>(encoded_hv);
-        }
-#endif
-
-
-		// accumulate each encoded hv to its corresponding class.
-		// FIXME: Should this be a dfg?? 
+        // TODO: Move this to DFG?
 		update_hv =  __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, label);
-
-        // When constructing initial class vectors use sign
-		//encoded_hv = __hetero_hdc_sign<Dhv, hvtype>(encoded_hv); 
-
 		update_hv = __hetero_hdc_sum<Dhv, hvtype>(update_hv, encoded_hv); 
 		__hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, update_hv, label); 
-		//print_hv<Dhv, hvtype>(update_hv); //TODO: Maybe there should be a _hdc_sign applied here.
 	}
 
 	std::cout << "Done init class hvs:" << std::endl;
 
-	#if 1
-	for (int i = 0; i < N_CLASS; i++) {
-		__hypervector__<Dhv, hvtype> class_temp = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, i);
-		std::cout << "Initial Class HV "<<i << " ";
-		print_hv<Dhv, hvtype>(class_temp);
-	}
-	#endif
 
 	int argmax[1];
 
@@ -499,13 +344,8 @@ int main(int argc, char** argv)
 		for (int j = 0; j < N_SAMPLE; j++) {
 #endif
 
-
-
-            //if(j == 1) break;
-			//printf("before creat hv\n");
 			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + (j * N_FEAT_PAD));
 
-			//printf("before root launch\n");
 			// Root node is: Encoding -> classing for a single HV.
 			void *DFG = __hetero_launch(
 
@@ -528,34 +368,10 @@ int main(int argc, char** argv)
 			);
 			__hetero_wait(DFG); 
 
-			// Print out the class that this hv is labeled as. 
-
-			//printf("after training root launch\n");
 	
 		}
 
-
-        /*
-        // TEMPORARY UPDATE
-        for(int l =0 ; l < N_CLASS; l++){
-            update_hv =  __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, l);
-            update_hv = __hetero_hdc_sign<Dhv, hvtype>(update_hv); 
-            __hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, update_hv, l); 
-        }*/
-
 	}
-
-    std::cout << "Post Training Class HV"<<"\n";
-    #if 1
-    for (int n = 0; n < N_CLASS; n++) {
-        __hypervector__<Dhv, hvtype> class_temp = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, n);
-        printf("Class Vector %d:\n", n);
-        print_hv<Dhv, hvtype>(class_temp);
-    }
-    #endif
-
-	std::ofstream training_file("training-classes.txt");
-
 	std::cout << "inference starting" << std::endl;
 
 	// ============ Inference =============== //
@@ -563,7 +379,6 @@ int main(int argc, char** argv)
 	/* For each hypervector, inference calculates what class it is closest to and labels the hypervectorit accordingly.*/
 	for (int j = 0; j < N_TEST; j++) {
 
-			//std::cout << "Inference vec: #" << j << std::endl;
 
 			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, inference_input_vectors + (j * N_FEAT_PAD));
 
@@ -587,11 +402,6 @@ int main(int argc, char** argv)
 				inference_labels + j, sizeof(int) //, false
 			);
 			__hetero_wait(DFG); 
-
-            std::cout << "Predicted Label:" << *(inference_labels+j) << "\n";
-            std::cout << "True Label:" << y_test[j] <<"\n";
-			//std::cout << "after root launch" << std::endl;
-
 	
 		}
 	
@@ -616,7 +426,3 @@ int main(int argc, char** argv)
 	__hpvm__cleanup();
 	return 0;
 }
-
-
-
-

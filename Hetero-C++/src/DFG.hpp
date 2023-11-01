@@ -17,9 +17,7 @@ typedef float hvtype;
 typedef int hvtype;
 #endif
 
-//#define FLIP_SCORE
 
-//#define BINARY
 
 template <int N, typename elemTy>
 void print_hv_alt(__hypervector__<N, elemTy> hv) {
@@ -57,7 +55,6 @@ void ptr_print_hv_alt(hvtype* ptr, int num_elems){
 
 template <typename T>
 T zero_hv(size_t loop_index_var) {
-	////std::cout << ((float*)datapoint_vector)[loop_index_var] << "\n";
 	return 0;
 }
 
@@ -70,9 +67,6 @@ void rp_encoding_node(/* Input Buffers: 2*/
     
     void* section = __hetero_section_begin();
 
-#if FGPA
-    __hetero_hint(DEVICE);
-#endif
 
     void* task = __hetero_task_begin(
         /* Input Buffers: 2*/ 3, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size,
@@ -80,27 +74,10 @@ void rp_encoding_node(/* Input Buffers: 2*/
         /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size,
         "inner_rp_encoding_task"
     );
-
-    ////std::cout << "encoding node" << std::endl;
-    
-#if FGPA
-    __hetero_hint(DEVICE);
-#endif
-    
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
-
     encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
-    // Uses the output_hv_ptr for the buffer. So that we can lower to 
-    // additional tasks. We should do an optimization in the bufferization
-    // analysis to re-use the same buffer (especially those coming from the
-    // formal parameters) to enable more of these tasks to become parallel loops.
     *output_hv_ptr = encoded_hv;
-    
-#ifdef BINARY
-    __hypervector__<D, hvtype> bipolar_encoded_hv = __hetero_hdc_sign<D, hvtype>(encoded_hv);
-    *output_hv_ptr = bipolar_encoded_hv;
-#endif
 
     __hetero_task_end(task); 
 
@@ -116,41 +93,18 @@ void rp_encoding_node_copy(/* Input Buffers: 2*/
         __hypervector__<D, hvtype>* output_hv_ptr, size_t output_hv_size) { // __hypervector__<D, binary>
     
     void* section = __hetero_section_begin();
-
-#if FGPA
-    __hetero_hint(DEVICE);
-#endif
-
     void* task = __hetero_task_begin(
         /* Input Buffers: 2*/ 3, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size,
         /* Parameters: 0*/
         /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size,
         "inner_rp_encoding_task"
     );
-
-    ////std::cout << "encoding node" << std::endl;
-    
-#if FGPA
-    __hetero_hint(DEVICE);
-#endif
     
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
 
     encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
-    // Uses the output_hv_ptr for the buffer. So that we can lower to 
-    // additional tasks. We should do an optimization in the bufferization
-    // analysis to re-use the same buffer (especially those coming from the
-    // formal parameters) to enable more of these tasks to become parallel loops.
     *output_hv_ptr = encoded_hv;
-
-
-#ifdef BINARY
-    __hypervector__<D, hvtype> bipolar_encoded_hv = __hetero_hdc_sign<D, hvtype>(encoded_hv);
-    *output_hv_ptr = bipolar_encoded_hv;
-#endif
-    
-
     __hetero_task_end(task); 
 
     __hetero_section_end(section);
@@ -220,20 +174,12 @@ void gen_rp_matrix(/* Input Buffers*/
          shifted_matrix,   shifted_matrix_size,
          "gen_shifted_matrix_task");
 
-
-    //std::cout << "Gen Shifted Task Begin" <<std::endl;
-	// Each row is just a wrap shift of the seed.
-
 	for (int i = 0; i < N_FEATURES; i++) {
 		__hypervector__<D, hvtype>  row = __hetero_hdc_wrap_shift<D, hvtype>(*rp_seed_vector, i);
         *row_buffer = row;
         __hetero_hdc_set_matrix_row<N_FEATURES, D, hvtype>(*shifted_matrix, row, i);
 
 	} 
-
-    //std::cout << "Gen Shifted Task End" <<std::endl;
-
-
    __hetero_task_end(gen_shifted_task); 
    }
 
@@ -245,12 +191,7 @@ void gen_rp_matrix(/* Input Buffers*/
          /* Num Outputs */ 1,
          transposed_matrix,   transposed_matrix_size,
          "gen_tranpose_task");
-
-    //std::cout << "Transpose Begin" <<std::endl;
 	 *transposed_matrix = __hetero_hdc_matrix_transpose<N_FEATURES, D, hvtype>(*shifted_matrix, N_FEATURES, D);
-
-    //std::cout << "Transpose Task End" <<std::endl;
-
    __hetero_task_end(transpose_task); 
    }
 
@@ -274,10 +215,6 @@ void rp_encoding_node_copy_copy(/* Input Buffers: 2*/
     
     void* section = __hetero_section_begin();
 
-#if FGPA
-    __hetero_hint(DEVICE);
-#endif
-
     void* task = __hetero_task_begin(
         /* Input Buffers: 2*/ 3, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size,
         /* Parameters: 0*/
@@ -285,29 +222,12 @@ void rp_encoding_node_copy_copy(/* Input Buffers: 2*/
         "inner_rp_encoding_task"
     );
 
-    ////std::cout << "encoding node" << std::endl;
-    
-#if FGPA
-    __hetero_hint(DEVICE);
-#endif
     
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
 
     encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
-    // Uses the output_hv_ptr for the buffer. So that we can lower to 
-    // additional tasks. We should do an optimization in the bufferization
-    // analysis to re-use the same buffer (especially those coming from the
-    // formal parameters) to enable more of these tasks to become parallel loops.
     *output_hv_ptr = encoded_hv;
-
-#ifdef BINARY
-    __hypervector__<D, hvtype> bipolar_encoded_hv = __hetero_hdc_sign<D, hvtype>(encoded_hv);
-    *output_hv_ptr = bipolar_encoded_hv;
-#endif
-
-    printf("Encoded datapoint\n");
-    ptr_print_hv_alt((hvtype*) output_hv_ptr, D);
 
     __hetero_task_end(task); 
 
@@ -316,7 +236,6 @@ void rp_encoding_node_copy_copy(/* Input Buffers: 2*/
 }
 
 
-// train == 0
 // In the streaming implementation, this runs for each encoded HV, so N_VEC * EPOCHs times.
 
 /* Just make guesses based on cossim  */
@@ -330,8 +249,6 @@ void __attribute__ ((noinline)) classification_node_inference(
     int* label_ptr, size_t label_size ) {   
     // Read classes hvs from host.
 
-    // Calculate the similarity scores between this hv (encoded_hv_ptr) and class (classes_ptr) hypervectors.
-    // Do once per hypervector:
      void* section = __hetero_section_begin();
 
     void* task1 = __hetero_task_begin(
@@ -347,39 +264,12 @@ void __attribute__ ((noinline)) classification_node_inference(
     __hypervector__<K, hvtype> scores = *scores_ptr; // Precision of these scores might need to be increased.
 
     #ifdef HAMMING_DIST
-    //////printf("before hamming_dist\n");
-    //auto v =  __hetero_hdc_get_matrix_row<K, D, hvtype>(classes, K, D, 1);
-    // FIXME: This is causing a segmentation fault. 
     *scores_ptr =  __hetero_hdc_hamming_distance<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
-    //////printf("after hamming_dist\n");
     #else
-#if 0
-    /* Cosine Smilarity Based Score */
-    *scores_ptr = __hetero_hdc_cossim<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
-#endif
-
-    
-
     *norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
-
-    //printf("Printing Norms!\n");
-    for (int k = 0; k < K; k++) {
-        hvtype norm = (hvtype) (*norms_ptr)[0][k];
-        //printf("[%d]: %.6f\n", k,norm);
-    }
     *scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
-
-    //printf("Printing Scores PRE!\n");
-    for (int k = 0; k < K; k++) {
-        hvtype norm = (hvtype) (*scores_ptr)[0][k];
-        //printf("[%d]: %.6f\n", k,norm);
-    }
-
     *scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
-
     *scores_ptr = __hetero_hdc_absolute_value<K, hvtype>(*scores_ptr);
-
-
     #endif
 
 
@@ -402,23 +292,13 @@ void __attribute__ ((noinline)) classification_node_inference(
     hvtype max_score = (hvtype) scores_elem_ptr[0];
     #endif
 
-#ifdef FLIP_SCORE
-    if(max_score < 0) max_score = max_score * -1.0;
-#endif
     
-    //printf("Printing Scores!\n");
     for (int k = 0; k < K; k++) {
         #ifdef HAMMING_DIST
         hvtype score = (hvtype) D - scores_elem_ptr[k];
         #else
         hvtype score = (hvtype) scores_elem_ptr[k];
-        //printf("[%d]: %.6f\n", k,score);
         #endif
-        ////std::cout << score << " ";
-
-#ifdef FLIP_SCORE
-        if(score < 0) score = score * -1.0;
-#endif
         if (score > max_score) {
             max_score = score;
             max_idx = k;
@@ -434,40 +314,6 @@ void __attribute__ ((noinline)) classification_node_inference(
     return;
 }
 
-// ========= This is just inlined on teh host for now. =======
-#if 0
-// train > 0
-// In the streaming implementation, this runs for each encoded HV, so N_VEC * EPOCHs times.
-// The initialization epoch for training ,needs to set class hypervectors as combination of all input datapoints mapped to that class.
-template<int D, int N_CLASSES, int N_VEC>
-void classification_node_training_initial( 
-    __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size,
-    __hypervector__<K, D, hvtype>* classes_ptr, size_t classes_size, // Do we need a separate buffer or can we edit in place. We can edit in place. 
-    __hypervector__<D, hvtype>* update_hv_ptr, size_t update_hv_size,  // Used in second stage of clustering node for extracting and accumulating
-    int* labels, size_t labels_size, /* Output also*/
-    int encoded_hv_idx ) {
-    // Do once for all hypervectors combined:
-    // Initialize class hypervectors (to 0).
-
-    // TODO: Find out how to cache encoded hypervectors.
-
-    // Class HVs are created via 'clustering' on +1, -1 encoded hypervectors. (loop 269).
-
-    // In first epoch of training, initialize the classes and store the encoded hypervector. 
-
-    // Convert encoded hypervectors (if for some reason they were bipolar ) to binary (1, 0)
-
-    *update_hv_ptr =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, label);
-    *update_hv_ptr = __hetero_hdc_sum<D, hvtype>(*update_hv_ptr, *encoded_hv_ptr); // May need an instrinsic for this.
-    __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, label); // How do we normalize?
-
-
-    // Binary encoding for these hypervectors. 
-    void* section = __hetero_section_begin();
-    return;
-    
-}
-#endif
 
 
 // Retraining epochs
@@ -484,7 +330,6 @@ void classification_node_training_rest(/* Input Buffers: 2 */
     int label ) {
     
 
-    // TODO: Find out how to cache encoded hypervectors.
 
     void* section = __hetero_section_begin();
 
@@ -492,9 +337,6 @@ void classification_node_training_rest(/* Input Buffers: 2 */
         /* Input Buffers: */ 4, encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size, scores_ptr, scores_size, norms_ptr, norms_size, 
         /* Output Buffers: */ 1, scores_ptr, scores_size, "training_rest_scoring_task"
     );
-    // Class HVs are created via 'clustering' on +1, -1 encoded hypervectors. (loop 269).
-    //std::cout << "training task 1" << std::endl;
-
     __hypervector__<D, hvtype> encoded_hv = *encoded_hv_ptr;
     __hypermatrix__<K, D, hvtype> classes = *classes_ptr;
 
@@ -506,41 +348,12 @@ void classification_node_training_rest(/* Input Buffers: 2 */
 #if 0
     *scores_ptr = __hetero_hdc_cossim<K, D, hvtype>(encoded_hv, classes);
 #endif
-
-
-
     *norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
-
-    printf("Printing Norms!\n");
-    for (int k = 0; k < K; k++) {
-        hvtype norm = (hvtype) (*norms_ptr)[0][k];
-        //printf("[%d]: %.6f\n", k,norm);
-    }
-    //print_hv_alt<K, hvtype>(*norms_ptr);
-
     *scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
-#if 0
-    printf("Printing Product !\n");
-
-    hvtype* BasePointer = (hvtype*) (scores_ptr);
-    for (int k = 0; k < K; k++) {
-        hvtype prod = BasePointer[k];
-        printf("[%d]: %.6f\n", k,prod);
-    }
-
-    print_hv_alt<K, hvtype>(*scores_ptr);
-#endif
     *scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
-
     *scores_ptr = __hetero_hdc_absolute_value<K, hvtype>(*scores_ptr);
-#if 0
-    printf("Scores post\n");
-    print_hv_alt<K, hvtype>(*scores_ptr);
-#endif
-
     #endif
 
-    //std::cout << "after dist metric" << std::endl;
 
 
     __hetero_task_end(task1);
@@ -562,41 +375,17 @@ void classification_node_training_rest(/* Input Buffers: 2 */
         hvtype max_score = (hvtype) scores_elem_ptr[0];
         #endif
         
-#ifdef FLIP_SCORE
-        if(max_score < 0) max_score = max_score * -1.0;
-#endif
-        printf("Printing scores: \n");
-        //std::cout << "good scores access" << std::endl;
         for (int k = 0; k < K; k++) {
             #ifdef HAMMING_DIST
             hvtype score = (hvtype) D - scores_elem_ptr[k];
             #else
             hvtype score = (hvtype) scores_elem_ptr[k];
             #endif
-            printf("%.6f\n", score);
-            ////std::cout << score << " ";
-
-#ifdef FLIP_SCORE
-            if(score < 0) score = score * -1.0;
-#endif
             if (score > max_score) {
                 max_score = score;
                 *argmax = k;
             }
         } 
-
-        //printf("after argmax\n");
-
-        //std::cout << "good argmax"<< std::endl;
-
-        // FIXME:
-        int correct = 0; // Count the number of correct prediction in training epochs.
-        
-        // Get correct label
-
-        //std::cout << *argmax << std::endl;
-
-        // Calculate max label / index
     }
     __hetero_task_end(task2);
 
@@ -609,33 +398,21 @@ void classification_node_training_rest(/* Input Buffers: 2 */
     );  
 
     int max_idx = *argmax;
-    printf("Training Label predicted %d\n", max_idx);
     // Update the correct and mispredicted class
     if (label != max_idx) {  // incorrect prediction)
         
         *update_hv_ptr =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, label);
         *update_hv_ptr = __hetero_hdc_sum<D, hvtype>(*update_hv_ptr, *encoded_hv_ptr); // May need an instrinsic for this.
         __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, label); // How do we normalize?
-        //printf("increment good\n");
 
-        // classHV[maxIndex] -= temp_dim;  Subtract from guessed class.
         *update_hv_ptr =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, max_idx);
         *update_hv_ptr = __hetero_hdc_sub<D, hvtype>(*update_hv_ptr, *encoded_hv_ptr); // May need an instrinsic for this.
         __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, max_idx); // How do we normalize?
-        //printf("decrement good\n");
     }
-    else {
-        //printf("correct\n");
-    }
-    /* 
-    else { // need to accumulate to global buffer or something, ask for how to do this. 
-        correct += 1; // Use to calculate score after each epoch. "cout << "Training epoch " << iter_epoch << " accuracy: " << float(correct)/size << endl;"
-    } */
     __hetero_task_end(task3);
 
     __hetero_section_end(section);
 
-    //printf("can i put stuff ehre??\n");
 
     return;
 }
@@ -709,7 +486,6 @@ void training_root_node( /* Input buffers: 3*/
                 int label
                 /* Output Buffers: 1 (Classes)*/ 
                 ){
-
     void* root_section = __hetero_section_begin();
 
     // Re-encode each iteration.
@@ -746,7 +522,6 @@ void training_root_node( /* Input buffers: 3*/
     __hetero_task_end(training_encoding_task);
 
     __hetero_section_end(root_section);
-    return;
 }
 
 // Dimensionality, Clusters, data point vectors, features per.
@@ -775,10 +550,6 @@ void encoding_and_inference_node( /* Input buffers: 3*/
         /* Output Buffers: 1 */ 1, encoded_hv_ptr, encoded_hv_size,
         "inference_encoding_task"  
     );
-
-    ////printf("inference encoding task\n");
-    ////std::cout << "inference encoding task" << std::endl;
-
     rp_encoding_node_copy_copy<D, N_FEATURES>(rp_matrix_ptr, rp_matrix_size, datapoint_vec_ptr, datapoint_vec_size, encoded_hv_ptr, encoded_hv_size);
 
     __hetero_task_end(encoding_task);
@@ -813,7 +584,6 @@ void inference_root_node( /* Input buffers: 3*/
                 __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, // // __hypervector__<D, binary>
                 __hypervector__<K, hvtype>* scores_ptr, size_t scores_size,
                 __hypervector__<K, hvtype>* norms_ptr, size_t norms_size,
-                // FIXME, give scores its own type.
                 /* Parameters: 1*/
                 int encoded_hv_idx,
                 /* Output Buffers: 1*/
@@ -854,7 +624,4 @@ void inference_root_node( /* Input buffers: 3*/
     __hetero_task_end(inference_task);
 
     __hetero_section_end(root_section);
-    return;
 }
-
-
