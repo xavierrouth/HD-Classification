@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <random>
 
-//#define OFFLOAD_RP_GEN 
+#define OFFLOAD_RP_GEN 
 //#define SHUFFLE
 
 
@@ -54,6 +54,14 @@ void datasetBinaryRead(std::vector<int> &data, std::string path){
 	file_.close();
 }
 
+
+void ptr_print_hv(hvtype* ptr, int num_elems){
+    std::cout << "[ ";
+    for(int i = 0; i < num_elems; i++){
+        std::cout <<ptr[i] <<" ";
+    }
+    std::cout<<"\n";
+}
 
 void datasetFloatRead(std::vector<float> &data, std::string path){
 	std::ifstream file_(path, std::ios::in | std::ios::binary);
@@ -169,6 +177,13 @@ int main(int argc, char** argv)
 	datasetFloatRead(X_test, X_test_path);
 	datasetBinaryRead(y_test, y_test_path);
 
+    int count = 5;
+    std::cout << " First "<< count<<" values for test" <<"\n";
+    for(int k =0 ; k < 5; k++){
+        std:: cout <<X_test[k] <<"\n";
+
+    }
+
 #endif
 
 	// FIXME, run inference on training dataset and make sure we get 100% accuracy.
@@ -237,7 +252,8 @@ int main(int argc, char** argv)
 
     assert((temp_vec2.size() / N_FEAT_PAD) == N_TEST && "Incorrect number of tests");
 
-	hvtype* inference_input_vectors = temp_vec.data();
+    
+	hvtype* inference_input_vectors = temp_vec2.data();
 
 	// N_FEAT is number of entries per vector
 
@@ -485,7 +501,7 @@ int main(int argc, char** argv)
 
 
 
-            if(j == 1) break;
+            //if(j == 1) break;
 			//printf("before creat hv\n");
 			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + (j * N_FEAT_PAD));
 
@@ -551,6 +567,8 @@ int main(int argc, char** argv)
 
 			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, inference_input_vectors + (j * N_FEAT_PAD));
 
+            printf("Data point %d\n", j);
+            ptr_print_hv((hvtype*) &datapoint_hv, N_FEAT);
 			// Root node is: Encoding -> classing for a single HV.
 			void *DFG = __hetero_launch(
 				(void*) inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>,
@@ -570,7 +588,10 @@ int main(int argc, char** argv)
 			);
 			__hetero_wait(DFG); 
 
+            std::cout << "Predicted Label:" << *(inference_labels+j) << "\n";
+            std::cout << "True Label:" << y_test[j] <<"\n";
 			//std::cout << "after root launch" << std::endl;
+
 	
 		}
 	

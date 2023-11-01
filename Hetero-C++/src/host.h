@@ -15,7 +15,7 @@ int train = 3; // number of training epochs (0 = inference)
 
 #define N_FEAT	        617 //feature per input (e.g., isolet: 617)
 #define N_CLASS		    26	//number of classes. (e.g., isolet: 26, ucihar 12)
-#define Dhv				1000  //hypervectors length
+#define Dhv				2048  //hypervectors length
 #define N_SAMPLE 		6238 // FIXME: Make these parametesr variable.
 
 //#define N_TEST 			6238// Needs to be constant for templated funciton. 
@@ -25,6 +25,7 @@ int train = 3; // number of training epochs (0 = inference)
 #define ROW				32 //number of rows of a matrix-vector multiplication window (32, 64, 128, 256, 512)
 
 #define PAD_			(N_FEAT & (COL - 1))
+
 #if PAD_ == 0
 	#define PAD 		0
 #else
@@ -33,7 +34,7 @@ int train = 3; // number of training epochs (0 = inference)
 
 #define N_FEAT_PAD		(N_FEAT + PAD)	//feature per input (e.g., isolet: 624, ucihar 568)
 
-//#define QUANT
+#define QUANT
 
 #ifdef QUANT
 // TODO: Add these to directory.

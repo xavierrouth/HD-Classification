@@ -40,6 +40,15 @@ void print_hv_alt(__hypervector__<N, elemTy> hv) {
     return;
 }
 
+
+void ptr_print_hv_alt(hvtype* ptr, int num_elems){
+    std::cout << "[ ";
+    for(int i = 0; i < num_elems; i++){
+        std::cout <<ptr[i] <<" ";
+    }
+    std::cout<<"\n";
+}
+
 // RANDOM PROJECTION ENCODING!!
 // Matrix-vector mul
 // Encodes a single vector using a random projection matrix
@@ -296,6 +305,9 @@ void rp_encoding_node_copy_copy(/* Input Buffers: 2*/
     __hypervector__<D, hvtype> bipolar_encoded_hv = __hetero_hdc_sign<D, hvtype>(encoded_hv);
     *output_hv_ptr = bipolar_encoded_hv;
 #endif
+
+    printf("Encoded datapoint\n");
+    ptr_print_hv_alt((hvtype*) output_hv_ptr, D);
 
     __hetero_task_end(task); 
 
