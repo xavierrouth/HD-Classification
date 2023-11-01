@@ -9,8 +9,11 @@
 #include <vector>
 #include <cassert>
 #include <cmath>
+#include <algorithm>
+#include <random>
 
-#define OFFLOAD_RP_GEN 
+//#define OFFLOAD_RP_GEN 
+//#define SHUFFLE
 
 
 #define DUMP(vec, suffix) {\
@@ -50,8 +53,30 @@ void datasetBinaryRead(std::vector<int> &data, std::string path){
 	}
 	file_.close();
 }
+
+
+void datasetFloatRead(std::vector<float> &data, std::string path){
+	std::ifstream file_(path, std::ios::in | std::ios::binary);
+	assert(file_.is_open() && "Couldn't open file!");
+	float size;
+	file_.read((char*)&size, sizeof(size));
+	float temp;
+	for(int i = 0; i < size; i++){
+		file_.read((char*)&temp, sizeof(temp));
+		data.push_back(temp);
+	}
+	file_.close();
+}
+
 template <typename T>
 T initialize_hv(T* datapoint_vector, size_t loop_index_var) {
+	//std::cout << ((float*)datapoint_vector)[loop_index_var] << "\n";
+	return datapoint_vector[loop_index_var];
+}
+
+
+template <typename T>
+T initialize_rp(T* datapoint_vector, size_t loop_index_var) {
 	//std::cout << ((float*)datapoint_vector)[loop_index_var] << "\n";
 	return datapoint_vector[loop_index_var];
 }
@@ -61,7 +86,6 @@ T initialize_rp_seed(size_t loop_index_var) {
 	int i = loop_index_var / 32;
 	int j = loop_index_var % 32;
 
-#if 0
 	//std::cout << i << " " << j << "\n";
     
 	long double temp = log2(i+2.5) * pow(2, 31);
@@ -81,8 +105,7 @@ T initialize_rp_seed(size_t loop_index_var) {
 	else {
 		return (T) -1;
 	}
-#endif
-
+#if 0
     double r = ((double) rand() / double(RAND_MAX));
 
 
@@ -101,6 +124,7 @@ T initialize_rp_seed(size_t loop_index_var) {
     } else {
         return (T) -1;
     }
+#endif
 }
 
 
@@ -115,6 +139,10 @@ int main(int argc, char** argv)
 
 	int EPOCH = std::atoi(argv[1]);
    
+#ifdef QUANT
+
+    std::cout << "Quantized Dataset!\n" << "\n";
+
 	std::vector<int> X_train; // X data. 
 	std::vector<int> y_train; // LABELS
 	
@@ -126,27 +154,73 @@ int main(int argc, char** argv)
 	
 	datasetBinaryRead(X_test, X_test_path);
 	datasetBinaryRead(y_test, y_test_path);
+#else
+
+    std::cout << "Non Quantized Dataset!\n" << "\n";
+	std::vector<float> X_train; // X data. 
+	std::vector<int> y_train; // LABELS
+	
+	datasetFloatRead(X_train, X_train_path);
+	datasetBinaryRead(y_train, y_train_path);
+
+	std::vector<float> X_test;
+	std::vector<int> y_test;
+	
+	datasetFloatRead(X_test, X_test_path);
+	datasetBinaryRead(y_test, y_test_path);
+
+#endif
 
 	// FIXME, run inference on training dataset and make sure we get 100% accuracy.
 	//datasetBinaryRead(X_test, X_train_path);
 	//datasetBinaryRead(y_test, y_train_path);
 
-	for (int i = 0; i < y_test.size(); i++) {
-		std::cout << y_test[i] << " ";
+
+
+    std::cout << "\n";
+
+    size_t X_train_samples = X_train.size() / N_FEAT_PAD;
+
+    assert(X_train_samples == y_train.size() && "Incorrect number of training labels");
+#if 0
+
+    std::cout << "Printing X Train Vectors :\n";
+	for (int i = 0; i < X_train.size(); i+= N_FEAT_PAD) {
+        for(int j = 0; j < N_FEAT;j++){
+            size_t index = i + j;
+            //std::cout << "Index:" << index << " Vector size: "<< X_train.size() << "\n";
+            //assert(index < X_train.size() && "Out of bounds!");
+            auto x_point = X_train[index];
+            std::cout << x_point << " ";
+        }
+        std::cout <<"\n";
 	}
-	std::cout << "Read Data Starting" << std::endl;
+#endif
+	std::cout << "\n" << "Read Data Starting" << std::endl;
 
 	srand(0);
 	
 	assert(N_SAMPLE == y_train.size());
+
+
 	assert(N_TEST == y_test.size());
 
-	// std::cout << y_test.size();
+
+	std::cout << "Training Samples: "<<N_SAMPLE<<"\n";
+	std::cout << "Test Samples: "<<N_TEST<<"\n";
 	
 	// TRAINING DATA INITIALZIATION
 	// FIXME: Should probably remove padding here, not durin gnode launches. 
 	std::vector<hvtype> temp_vec(X_train.begin(), X_train.end());
 	hvtype* training_input_vectors = temp_vec.data();
+
+    printf("Printing training data point 0:\n");
+    for(int i = 0; i < N_FEAT; i++){
+        std::cout<<training_input_vectors[i]<<" ";
+
+    }
+    std::cout<<"\n";
+    std::cout << "Label 0: "<< y_train[0]<<"\n";
 	// N_FEAT is number of entries per vector
 	size_t input_vector_size = N_FEAT * sizeof(hvtype); // Size of a single vector
 
@@ -160,7 +234,11 @@ int main(int argc, char** argv)
 
 	// TRAINING DATA INITIALZIATION
 	std::vector<hvtype> temp_vec2(X_test.begin(), X_test.end());
+
+    assert((temp_vec2.size() / N_FEAT_PAD) == N_TEST && "Incorrect number of tests");
+
 	hvtype* inference_input_vectors = temp_vec.data();
+
 	// N_FEAT is number of entries per vector
 
 
@@ -207,8 +285,6 @@ int main(int argc, char** argv)
 
 	__hypervector__<Dhv, hvtype> rp_seed = __hetero_hdc_create_hypervector<Dhv, hvtype>(0, (void*) initialize_rp_seed<hvtype>);	
 
-    printf("RP SEED MATRIX\n");
-    print_hv<Dhv, hvtype>(rp_seed);
 
 	std::cout << "Dimension over 32: " << Dhv/32 << std::endl;
 	//We need a seed ID. To generate in a random yet determenistic (for later debug purposes) fashion, we use bits of log2 as some random stuff.
@@ -260,22 +336,47 @@ int main(int argc, char** argv)
 
 
 #else
+    std::cout << "Reading RP Matrix from file" <<"\n";
+    std::vector<int> rp_mat_read;
+	//datasetBinaryRead(rp_mat_read, rp_matrix_path);
 
-	// Generate the random projection matrix. Dhv rows, N_FEAT cols, so Dhv x N_FEAT.
-	__hypermatrix__<N_FEAT, Dhv, hvtype> rp_matrix_transpose = __hetero_hdc_hypermatrix<N_FEAT, Dhv, hvtype>();
-	__hypervector__<Dhv, hvtype> row = __hetero_hdc_hypervector<Dhv, hvtype>();
+    std::ifstream InFile;
+    InFile.open(rp_matrix_txt);
+    int number;
+    while(InFile >> number)
+        rp_mat_read.push_back(number);
 
-	// Each row is just a wrap shift of the seed.
-	for (int i = 0; i < N_FEAT; i++) {
-		row = __hetero_hdc_wrap_shift<Dhv, hvtype>(rp_seed, i);
-		//print_hv<Dhv, hvtype>(row);
-		__hetero_hdc_set_matrix_row<N_FEAT, Dhv, hvtype>(rp_matrix_transpose, row, i);
-	} 
+    std::cout << "First 10 values int\n";
+    for(int k = 0; k < 10; k++){
+        std::cout << rp_mat_read[k] << " ";
+    }
+    std::cout << "\n";
 
-	// Now transpose in order to be able to multiply with input hv in DFG.
-	__hypermatrix__<Dhv, N_FEAT, hvtype> rp_matrix = __hetero_hdc_matrix_transpose<N_FEAT, Dhv, hvtype>(rp_matrix_transpose, N_FEAT, Dhv);
+	std::vector<hvtype> temp_rp(rp_mat_read.begin(), rp_mat_read.end());
+    std::cout << "First 10 values \n";
+    for(int k = 0; k < 10; k++){
+        std::cout << temp_rp[k] << " ";
+    }
+    std::cout << "\n";
 
-	auto rp_matrix_buffer = &rp_matrix;
+    hvtype* rp_input_vectors = temp_rp.data();
+  __hypermatrix__<Dhv, N_FEAT, hvtype> rp_matrix =__hetero_hdc_create_hypermatrix<Dhv, N_FEAT, hvtype>(1, (void*) initialize_rp<hvtype>, rp_input_vectors);
+    auto rp_matrix_buffer = &rp_matrix;
+
+#if 1
+    for(int d = 0; d < Dhv; d++){
+        __hypermatrix__<Dhv, N_FEAT, hvtype>* rp_ptr = (__hypermatrix__<Dhv, N_FEAT, hvtype>*) rp_matrix_buffer;
+        auto row = __hetero_hdc_get_matrix_row<Dhv,N_FEAT, hvtype>(*rp_ptr , Dhv, N_FEAT, d);
+
+        printf("RP MATRIX ROW %d:\n", d);
+        print_hv<N_FEAT, hvtype>(row);
+
+
+    }
+
+
+#endif
+
 #endif
 
 	// Confirm that there are equal amounts of each label:
@@ -304,7 +405,12 @@ int main(int argc, char** argv)
 	std::cout << "Init class hvs:" << std::endl;
 	// TODO: Move to DAG.
 	for (int i = 0; i < N_SAMPLE; i++) {
-		__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + i * N_FEAT_PAD);
+		__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + (i * N_FEAT_PAD));
+
+        if(i == 0){
+            std::cout << "Training point 0:"<<"\n";
+            print_hv<N_FEAT, hvtype>(datapoint_hv);
+        }
 
 		// Encode each input datapoitn
 		void* initialize_DFG = __hetero_launch(
@@ -325,15 +431,22 @@ int main(int argc, char** argv)
 
 		// rp_encoding_node encodes a single encoded_hv, which we then have to accumulate to our big group of classes in class_hv[s].
 
-#if 0
-        printf("Initial Encoding for [HV %d]\n",i);
-        print_hv<Dhv, hvtype>(encoded_hv);
+#if 1
+
+        if(i == 0){
+            printf("Initial Encoding for [HV %d]\n",i);
+            print_hv<Dhv, hvtype>(encoded_hv);
+        }
 #endif
 
 
 		// accumulate each encoded hv to its corresponding class.
 		// FIXME: Should this be a dfg?? 
 		update_hv =  __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, label);
+
+        // When constructing initial class vectors use sign
+		//encoded_hv = __hetero_hdc_sign<Dhv, hvtype>(encoded_hv); 
+
 		update_hv = __hetero_hdc_sum<Dhv, hvtype>(update_hv, encoded_hv); 
 		__hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, update_hv, label); 
 		//print_hv<Dhv, hvtype>(update_hv); //TODO: Maybe there should be a _hdc_sign applied here.
@@ -344,7 +457,7 @@ int main(int argc, char** argv)
 	#if 0
 	for (int i = 0; i < N_CLASS; i++) {
 		__hypervector__<Dhv, hvtype> class_temp = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, i);
-		std::cout << i << " ";
+		std::cout << "Class HV "<<i << " ";
 		print_hv<Dhv, hvtype>(class_temp);
 	}
 	#endif
@@ -353,13 +466,25 @@ int main(int argc, char** argv)
 
 	// Training generates classes from labeled data. 
 	// ======= Training Rest Epochs ======= 
+
 	for (int i = 0; i < EPOCH; i++) {
 		// Can we normalize the hypervectors here or do we have to do that in the DFG.
 		std::cout << "Epoch: #" << i << std::endl;
+#ifdef SHUFFLE
+        std::vector<int> indices;
+        for(int j = 0; j < N_SAMPLE; j++){
+            indices.push_back(j);
+        }
+        auto rng = std::default_random_engine {};
+        std::shuffle(std::begin(indices), std::end(indices), rng);
+
+		for (int j : indices) {
+#else
 		for (int j = 0; j < N_SAMPLE; j++) {
+#endif
 
 			//printf("before creat hv\n");
-			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + j * N_FEAT_PAD);
+			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + (j * N_FEAT_PAD));
 
 			//printf("before root launch\n");
 			// Root node is: Encoding -> classing for a single HV.
@@ -401,8 +526,9 @@ int main(int argc, char** argv)
 
 	}
 
-    #if 0
+    #if 1
     for (int i = 0; i < N_CLASS; i++) {
+        if(i != 0) continue;
         __hypervector__<Dhv, hvtype> class_temp = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, i);
         printf("Class Vector %d:\n", i);
         print_hv<Dhv, hvtype>(class_temp);
@@ -430,7 +556,7 @@ int main(int argc, char** argv)
 
 			//std::cout << "Inference vec: #" << j << std::endl;
 
-			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, inference_input_vectors + j * N_FEAT_PAD);
+			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, inference_input_vectors + (j * N_FEAT_PAD));
 
 			// Root node is: Encoding -> classing for a single HV.
 			void *DFG = __hetero_launch(

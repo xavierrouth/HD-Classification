@@ -15,7 +15,7 @@ int train = 3; // number of training epochs (0 = inference)
 
 #define N_FEAT	        617 //feature per input (e.g., isolet: 617)
 #define N_CLASS		    26	//number of classes. (e.g., isolet: 26, ucihar 12)
-#define Dhv				2048  //hypervectors length
+#define Dhv				1000  //hypervectors length
 #define N_SAMPLE 		6238 // FIXME: Make these parametesr variable.
 
 //#define N_TEST 			6238// Needs to be constant for templated funciton. 
@@ -33,9 +33,25 @@ int train = 3; // number of training epochs (0 = inference)
 
 #define N_FEAT_PAD		(N_FEAT + PAD)	//feature per input (e.g., isolet: 624, ucihar 568)
 
+//#define QUANT
+
+#ifdef QUANT
 // TODO: Add these to directory.
 std::string X_train_path = "../dataset/isolet_trainX.bin";
 std::string  y_train_path = "../dataset/isolet_trainY.bin";
 std::string  X_test_path = "../dataset/isolet_testX.bin";
 std::string  y_test_path = "../dataset/isolet_testY.bin";
+
+#else
+
+std::string X_train_path = "../dataset/isolet_nq_trainX.bin";
+std::string  y_train_path = "../dataset/isolet_nq_trainY.bin";
+std::string  X_test_path = "../dataset/isolet_nq_testX.bin";
+std::string  y_test_path = "../dataset/isolet_nq_testY.bin";
+
+#endif
+
+std::string rp_matrix_path = "../dataset/rp_matrix.bin";
+
+std::string rp_matrix_txt = "../dataset/rp_matrix.txt";
 

@@ -19,7 +19,8 @@ typedef int hvtype;
 
 //#define FLIP_SCORE
 
-#define BINARY
+//#define BINARY
+
 
 // RANDOM PROJECTION ENCODING!!
 // Matrix-vector mul
@@ -573,7 +574,12 @@ void classification_node_training_rest(/* Input Buffers: 2 */
         // temp_dim = bipolar_encoding(encoded_hv); 
 
         // classHV[label]  += temp_dim;  Add to actual class.
+        
         *update_hv_ptr =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, label);
+
+        // Update encoding vector to binarize for update step
+        
+        *encoded_hv_ptr = __hetero_hdc_sign<D, hvtype>(*encoded_hv_ptr); 
         *update_hv_ptr = __hetero_hdc_sum<D, hvtype>(*update_hv_ptr, *encoded_hv_ptr); // May need an instrinsic for this.
         __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, label); // How do we normalize?
         //printf("increment good\n");
