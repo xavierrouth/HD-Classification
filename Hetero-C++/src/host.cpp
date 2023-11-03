@@ -393,8 +393,6 @@ int main(int argc, char** argv)
 
 			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, inference_input_vectors + (j * N_FEAT_PAD));
 
-            printf("Data point %d\n", j);
-            ptr_print_hv((hvtype*) &datapoint_hv, N_FEAT);
 			// Root node is: Encoding -> classing for a single HV.
 			void *DFG = __hetero_launch(
 #ifdef FPGA

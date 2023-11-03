@@ -74,9 +74,11 @@ void rp_encoding_node(/* Input Buffers: 2*/
         /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size,
         "inner_rp_encoding_task"
     );
+#if 0
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
-    encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
+#endif
+    __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
     *output_hv_ptr = encoded_hv;
 
     __hetero_task_end(task); 
@@ -100,10 +102,12 @@ void rp_encoding_node_copy(/* Input Buffers: 2*/
         "inner_rp_encoding_task"
     );
     
+#if 0
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
+#endif
 
-    encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
+    __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
     *output_hv_ptr = encoded_hv;
     __hetero_task_end(task); 
 
@@ -223,10 +227,12 @@ void rp_encoding_node_copy_copy(/* Input Buffers: 2*/
     );
 
     
+#if 0
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
+#endif
 
-    encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
+    __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
     *output_hv_ptr = encoded_hv;
 
     __hetero_task_end(task); 
@@ -423,14 +429,14 @@ void encoding_and_training_node( /* Input buffers: 3*/
                 __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, // __hypermatrix__<N_FEATURES, D, binary>
                 __hypervector__<N_FEATURES, hvtype>* datapoint_vec_ptr, size_t datapoint_vec_size, // Features
                  __hypermatrix__<K, D, hvtype>* classes_ptr, size_t classes_size, // __hypermatrix__<K, D, binary> // Also an output.
+                 int label,
                 /* Local Vars: 3 */
                 __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, // // __hypervector__<D, binary>
                 __hypervector__<K, hvtype>* scores_ptr, size_t scores_size,
                 __hypervector__<K, hvtype>* norms_ptr, size_t norms_size,
                 __hypervector__<D, hvtype>* update_hv_ptr, size_t update_hv_size,  // Used in second stage of clustering node for extracting and accumulating
-                int* argmax_ptr, size_t argmax_size,
+                int* argmax_ptr, size_t argmax_size
                 /* Parameters: 1*/
-                int label
                 /* Output Buffers: 1 (Classes)*/ 
                 ){
 
@@ -495,11 +501,11 @@ void training_root_node( /* Input buffers: 3*/
             datapoint_vec_ptr, datapoint_vec_size, 
             encoded_hv_ptr, encoded_hv_size,  
             classes_ptr, classes_size, 
+            label,
             scores_ptr, scores_size,
             norms_ptr, norms_size,
             update_hv_ptr, update_hv_size,
             argmax_ptr, argmax_size,
-            label,
         /* Output Buffers: 1 */ 1, 
         encoded_hv_ptr, encoded_hv_size,
         "training_encoding_task_wrapper"  
@@ -511,12 +517,12 @@ void training_root_node( /* Input buffers: 3*/
         rp_matrix_ptr, rp_matrix_size, 
         datapoint_vec_ptr, datapoint_vec_size, 
         classes_ptr, classes_size, 
+        label,
         encoded_hv_ptr, encoded_hv_size,  
         scores_ptr, scores_size,
         norms_ptr, norms_size,
         update_hv_ptr, update_hv_size,
-        argmax_ptr, argmax_size,
-        label
+        argmax_ptr, argmax_size
     );
     
     __hetero_task_end(training_encoding_task);
