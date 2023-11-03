@@ -74,9 +74,11 @@ void rp_encoding_node(/* Input Buffers: 2*/
         /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size,
         "inner_rp_encoding_task"
     );
+#if 0
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
-    encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
+#endif
+    __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
     *output_hv_ptr = encoded_hv;
 
     __hetero_task_end(task); 
@@ -100,10 +102,12 @@ void rp_encoding_node_copy(/* Input Buffers: 2*/
         "inner_rp_encoding_task"
     );
     
+#if 0
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
+#endif
 
-    encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
+    __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
     *output_hv_ptr = encoded_hv;
     __hetero_task_end(task); 
 
@@ -223,10 +227,12 @@ void rp_encoding_node_copy_copy(/* Input Buffers: 2*/
     );
 
     
+#if 0
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
+#endif
 
-    encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
+    __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
     *output_hv_ptr = encoded_hv;
 
     __hetero_task_end(task); 
