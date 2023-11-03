@@ -12,8 +12,13 @@
 #include <algorithm>
 #include <random>
 
-#define OFFLOAD_RP_GEN 
+#define OFFLOAD_RP_GEN
+#define FPGA
 //#define SHUFFLE
+
+#ifdef FPGA
+#include "flat-DFG.hpp"
+#endif
 
 
 #define DUMP(vec, suffix) {\
@@ -299,7 +304,11 @@ int main(int argc, char** argv)
 
 		// Encode each input datapoitn
 		void* initialize_DFG = __hetero_launch(
-			(void*) InitialEncodingDFG<Dhv, N_FEAT>, //FIXME: Make this a copy. 
+#ifdef FPGA
+			(void*) FlatInitialEncodingDFG<Dhv, N_FEAT>,
+#else
+			(void*) InitialEncodingDFG<Dhv, N_FEAT>,
+#endif
 			2 + 1,
 			/* Input Buffers: 2*/ 
 			rp_matrix_buffer, rp_matrix_size, //false,
@@ -348,9 +357,11 @@ int main(int argc, char** argv)
 
 			// Root node is: Encoding -> classing for a single HV.
 			void *DFG = __hetero_launch(
-
+#ifdef FPGA
+				(void*) flat_training_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>,
+#else	
 				(void*) training_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>,
-
+#endif
 				/* Input Buffers: 4*/ 9,
 				rp_matrix_buffer, rp_matrix_size, //false,
 				&datapoint_hv, input_vector_size, //true,
@@ -386,7 +397,11 @@ int main(int argc, char** argv)
             ptr_print_hv((hvtype*) &datapoint_hv, N_FEAT);
 			// Root node is: Encoding -> classing for a single HV.
 			void *DFG = __hetero_launch(
+#ifdef FPGA
+				(void*) flat_inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>,
+#else
 				(void*) inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>,
+#endif
 				/* Input Buffers: 3*/ 8,
 				rp_matrix_buffer, rp_matrix_size, //false,
 				&datapoint_hv, input_vector_size, //true,
