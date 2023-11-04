@@ -13,7 +13,7 @@
 #include <random>
 
 #define OFFLOAD_RP_GEN
-//#define FPGA
+#define FPGA
 //#define SHUFFLE
 
 #ifdef FPGA
@@ -257,6 +257,7 @@ int main(int argc, char** argv)
 	std::cout << "After seed generation\n";
 
 	// Dhv needs to be greater than N_FEAT for the orthognality to hold.
+	t_start = std::chrono::high_resolution_clock::now();
 	
 #ifdef OFFLOAD_RP_GEN
 	hvtype* rp_matrix_buffer = new hvtype[N_FEAT * Dhv];
@@ -430,6 +431,8 @@ int main(int argc, char** argv)
 	t_elapsed = std::chrono::high_resolution_clock::now() - t_start;
 	
 	mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_elapsed).count();
+
+	std::cout << "Execution (" << EPOCH << " epochs)  took " << mSec << " mSec" << std::endl;
 
 	std::ofstream myfile("out.txt");
 

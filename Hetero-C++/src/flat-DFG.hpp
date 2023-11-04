@@ -51,21 +51,7 @@ void flat_inference_root_node( /* Input buffers: 3*/
         "root_inference_task"
     );
 
-    // Re-encode each iteration.
-    void* inference_task = __hetero_task_begin(
-            /* Input Buffers: 3 */ 8, 
-            rp_matrix_ptr, rp_matrix_size, 
-            datapoint_vec_ptr, datapoint_vec_size, 
-            encoded_hv_ptr, encoded_hv_size,
-            classes_ptr, classes_size, 
-            label_ptr, label_size,
-            scores_ptr, scores_size,
-            norms_ptr, norms_size,
-            encoded_hv_idx,
-            /* Output Buffers: 1 */ 1,
-            encoded_hv_ptr, encoded_hv_size,
-            "inference_task"
-            );
+    void* fpga_section = __hetero_section_begin();
 
     // ======= Encoding and Inference ============== 
 
@@ -155,7 +141,8 @@ void flat_inference_root_node( /* Input buffers: 3*/
     __hetero_task_end(task2);
 
     // ========= ARGMAX / UPDATE END ===========
-    __hetero_task_end(inference_task);
+
+    __hetero_section_end(fpga_section);
 
     // ======== INFERENCE END =============
 
@@ -199,6 +186,8 @@ void flat_training_root_node( /* Input buffers: 3*/
         "training_encoding_task_wrapper"  
     );
 
+    void* fpga_section = __hetero_section_begin();
+
     // Re-encode each iteration.
     void* rp_encoding_task = __hetero_task_begin(
         /* Input Buffers: 3 */ 3, rp_matrix_ptr, rp_matrix_size, datapoint_vec_ptr, datapoint_vec_size, 
@@ -206,6 +195,7 @@ void flat_training_root_node( /* Input buffers: 3*/
         /* Output Buffers: 1 */ 1, encoded_hv_ptr, encoded_hv_size,
         "training_encoding_task"  
     );
+
     {
     // ======= Encoding  ============== 
     // Re-encode each iteration.
@@ -301,7 +291,9 @@ void* task1 = __hetero_task_begin(
     }
     __hetero_task_end(task3);
 
-    // __hetero_task_end(training_encoding_task);
+    __hetero_section_end(fpga_section);
+
+     __hetero_task_end(root_task);
 
     __hetero_section_end(root_section);
 }

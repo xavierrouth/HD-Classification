@@ -18,7 +18,6 @@ typedef int hvtype;
 #endif
 
 
-
 template <int N, typename elemTy>
 void print_hv_alt(__hypervector__<N, elemTy> hv) {
     int num_neg_one = 0;

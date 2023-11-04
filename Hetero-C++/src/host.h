@@ -14,8 +14,8 @@
 int train = 3; // number of training epochs (0 = inference)
 
 #define QUANT
-//#define ISOLET
-#define UCIHAR
+#define ISOLET
+//#define UCIHAR
 //#define MNIST
 
 #define Dhv				2048  //hypervectors length
@@ -54,12 +54,12 @@ std::string  y_test_path = "../dataset/isolet_nq_testY.bin";
 
 #define N_CLASS		10	//number of centers. (e.g., isolet: 26,)
 #define N_FEAT			784	//feature per input (e.g., isolet: 617)
-#define N_SAMPLE 		10000
-#define N_TEST 			1
-std::string X_train_path = "../dataset/mnist_nq_trainX.bin";
-std::string  y_train_path = "../dataset/mnist_nq_trainY.bin";
-std::string  X_test_path = "../dataset/mnist_nq_testX.bin";
-std::string  y_test_path = "../dataset/mnist_nq_testY.bin";
+#define N_SAMPLE 		60000
+#define N_TEST 			10000
+std::string X_train_path = "../dataset/mnist_trainX.bin";
+std::string  y_train_path = "../dataset/mnist_trainY.bin";
+std::string  X_test_path = "../dataset/mnist_testX.bin";
+std::string  y_test_path = "../dataset/mnist_testY.bin";
 
 #endif
 
