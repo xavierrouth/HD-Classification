@@ -14,9 +14,9 @@
 int train = 3; // number of training epochs (0 = inference)
 
 #define QUANT
-#define ISOLET
+//#define ISOLET
 //#define UCIHAR
-//#define MNIST
+#define MNIST
 
 #define Dhv				2048  //hypervectors length
 
