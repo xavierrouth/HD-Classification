@@ -423,14 +423,15 @@ void encoding_and_training_node( /* Input buffers: 3*/
                 __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, // __hypermatrix__<N_FEATURES, D, binary>
                 __hypervector__<N_FEATURES, hvtype>* datapoint_vec_ptr, size_t datapoint_vec_size, // Features
                  __hypermatrix__<K, D, hvtype>* classes_ptr, size_t classes_size, // __hypermatrix__<K, D, binary> // Also an output.
+
+                int label,
                 /* Local Vars: 3 */
                 __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, // // __hypervector__<D, binary>
                 __hypervector__<K, hvtype>* scores_ptr, size_t scores_size,
                 __hypervector__<K, hvtype>* norms_ptr, size_t norms_size,
                 __hypervector__<D, hvtype>* update_hv_ptr, size_t update_hv_size,  // Used in second stage of clustering node for extracting and accumulating
-                int* argmax_ptr, size_t argmax_size,
+                int* argmax_ptr, size_t argmax_size
                 /* Parameters: 1*/
-                int label
                 /* Output Buffers: 1 (Classes)*/ 
                 ){
 
@@ -511,17 +512,18 @@ void training_root_node( /* Input buffers: 3*/
         rp_matrix_ptr, rp_matrix_size, 
         datapoint_vec_ptr, datapoint_vec_size, 
         classes_ptr, classes_size, 
+        label,
         encoded_hv_ptr, encoded_hv_size,  
         scores_ptr, scores_size,
         norms_ptr, norms_size,
         update_hv_ptr, update_hv_size,
-        argmax_ptr, argmax_size,
-        label
+        argmax_ptr, argmax_size
     );
     
     __hetero_task_end(training_encoding_task);
 
     __hetero_section_end(root_section);
+    return;
 }
 
 // Dimensionality, Clusters, data point vectors, features per.
