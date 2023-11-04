@@ -13,7 +13,7 @@
 #include <random>
 
 #define OFFLOAD_RP_GEN
-#define FPGA
+//#define FPGA
 //#define SHUFFLE
 
 #ifdef FPGA
@@ -164,19 +164,26 @@ int main(int argc, char** argv)
 #endif
     size_t X_train_samples = X_train.size() / N_FEAT_PAD;
 
+	std::cout << y_train.size() << " ";
+	std::cout << y_test.size() << std::endl;
+	std::cout << X_train.size() << std::endl;
+	std::cout << X_train_samples << std::endl;
     assert(X_train_samples == y_train.size() && "Incorrect number of training labels");
 	std::cout << "\n" << "Read Data Starting" << std::endl;
 
 	srand(0);
+	
 	
 	assert(N_SAMPLE == y_train.size());
 
 
 	assert(N_TEST == y_test.size());
 
+	
 
 	std::cout << "Training Samples: "<<N_SAMPLE<<"\n";
 	std::cout << "Test Samples: "<<N_TEST<<"\n";
+	
 	
 	std::vector<hvtype> temp_vec(X_train.begin(), X_train.end());
 	hvtype* training_input_vectors = temp_vec.data();
