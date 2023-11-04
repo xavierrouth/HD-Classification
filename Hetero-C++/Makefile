@@ -135,4 +135,4 @@ build/output.fpga.ll: build/hpvm.host.fpga.ll
 .PHONY: clean
 
 clean:
-	rm -rf *.dot build/*.ll build/* host-gpu host-cpu
+	rm -rf *.dot build/*.ll host-gpu host-cpu
