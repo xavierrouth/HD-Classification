@@ -18,6 +18,9 @@ typedef int hvtype;
 #endif
 
 
+#ifndef DEVICE
+#define DEVICE 1
+#endif
 
 // Dimensionality, Clusters, data point vectors, features per.
 template <int D, int K, int N_VEC, int N_FEATURES>
@@ -196,6 +199,8 @@ void flat_training_root_node( /* Input buffers: 3*/
         "training_encoding_task"  
     );
 
+    __hetero_hint(DEVICE);
+
     {
     // ======= Encoding  ============== 
     // Re-encode each iteration.
@@ -215,6 +220,7 @@ void* task1 = __hetero_task_begin(
         /* Output Buffers: */ 1, scores_ptr, scores_size, "training_rest_scoring_task"
     );
     {
+        __hetero_hint(DEVICE);
     __hypervector__<D, hvtype> encoded_hv = *encoded_hv_ptr;
     __hypermatrix__<K, D, hvtype> classes = *classes_ptr;
 
@@ -242,6 +248,8 @@ void* task1 = __hetero_task_begin(
         /* Output Buffers: 1*/ 2,  classes_ptr, classes_size, argmax_ptr, argmax_size, "training_rest_find_score_task"
     );  
     {
+        __hetero_hint(DEVICE);
+
         __hypervector__<K, hvtype> scores = *scores_ptr;
 
         *argmax_ptr = 0;
@@ -275,7 +283,7 @@ void* task1 = __hetero_task_begin(
         /* Output Buffers: 1*/ 1,  classes_ptr, classes_size, "update_classes_task"
     );  
     {
-
+        __hetero_hint(DEVICE);
     int max_idx = *argmax_ptr;
     // Update the correct and mispredicted class
     if (label != max_idx) {  // incorrect prediction)
