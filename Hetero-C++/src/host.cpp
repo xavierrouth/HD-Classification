@@ -173,12 +173,8 @@ int main(int argc, char** argv)
 	std::cout << "Training Samples: "<<N_SAMPLE<<"\n";
 	std::cout << "Test Samples: "<<N_TEST<<"\n";
 	
-#if hvtype == int
-	hvtype* training_input_vectors = X_train.data();
-#else
 	std::vector<hvtype> temp_vec(X_train.begin(), X_train.end());
 	hvtype* training_input_vectors = temp_vec.data();
-#endif
 
 	// N_FEAT is number of entries per vector
 	size_t input_vector_size = N_FEAT * sizeof(hvtype); // Size of a single vector
@@ -192,7 +188,7 @@ int main(int argc, char** argv)
 	size_t inference_labels_size = N_TEST * sizeof(int);
 
 #if hvtype == int
-	hvtype* inference_input_vectors = X_test.data();
+	int* inference_input_vectors = X_test.data();
 #else
 	// TRAINING DATA INITIALZIATION
 	std::vector<hvtype> temp_vec2(X_test.begin(), X_test.end());
