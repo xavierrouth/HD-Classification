@@ -173,8 +173,12 @@ int main(int argc, char** argv)
 	std::cout << "Training Samples: "<<N_SAMPLE<<"\n";
 	std::cout << "Test Samples: "<<N_TEST<<"\n";
 	
+#if hvtype == int
+	hvtype* training_input_vectors = X_train.data();
+#else
 	std::vector<hvtype> temp_vec(X_train.begin(), X_train.end());
 	hvtype* training_input_vectors = temp_vec.data();
+#endif
 
 	// N_FEAT is number of entries per vector
 	size_t input_vector_size = N_FEAT * sizeof(hvtype); // Size of a single vector
@@ -187,13 +191,17 @@ int main(int argc, char** argv)
 	int inference_labels[N_TEST];
 	size_t inference_labels_size = N_TEST * sizeof(int);
 
+#if hvtype == int
+	hvtype* inference_input_vectors = X_test.data();
+#else
 	// TRAINING DATA INITIALZIATION
 	std::vector<hvtype> temp_vec2(X_test.begin(), X_test.end());
-
+	hvtype* inference_input_vectors = temp_vec2.data();
     assert((temp_vec2.size() / N_FEAT_PAD) == N_TEST && "Incorrect number of tests");
+#endif
+
 
     
-	hvtype* inference_input_vectors = temp_vec2.data();
 
 	// N_FEAT is number of entries per vector
 
@@ -416,6 +424,8 @@ int main(int argc, char** argv)
 	t_elapsed = std::chrono::high_resolution_clock::now() - t_start;
 	
 	mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_elapsed).count();
+
+	std::cout << "Overall Benchmark took " << mSec << " mSec" << std::endl;
 
 	std::ofstream myfile("out.txt");
 
