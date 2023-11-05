@@ -223,18 +223,13 @@ int main(int argc, char** argv)
 	//hvtype* update_hv_ptr = new hvtype[Dhv];
 	size_t update_hv_size = Dhv * sizeof(hvtype);
 	
-	// Used to store a temporary class_hv for initializion
-	__hypervector__<Dhv, hvtype> class_hv = __hetero_hdc_hypervector<Dhv, hvtype>();
-	hvtype* class_buffer = new hvtype[Dhv];
 	size_t class_size = Dhv * sizeof(hvtype);
 
 	// Read from during classification
 	__hypermatrix__<N_CLASS, Dhv, hvtype> classes = __hetero_hdc_create_hypermatrix<N_CLASS, Dhv, hvtype>(0, (void*) zero_hv<hvtype>);
-	hvtype* classes_buffer = new hvtype[N_CLASS * Dhv];
 	size_t classes_size = N_CLASS * Dhv * sizeof(hvtype);
 
 	// Temporarily store scores, allows us to split score calcuation into a separte task.
-	__hypervector__<Dhv, hvtype> scores = __hetero_hdc_hypervector<Dhv, hvtype>();
 	hvtype* scores_buffer = new hvtype[N_CLASS];
 	size_t scores_size = N_CLASS * sizeof(hvtype);
 
