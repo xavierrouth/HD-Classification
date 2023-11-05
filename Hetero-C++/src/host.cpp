@@ -295,7 +295,9 @@ int main(int argc, char** argv)
 	// Initialize class hvs.
 	std::cout << "Init class hvs:" << std::endl;
 	for (int i = 0; i < N_SAMPLE; i++) {
-		__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + (i * N_FEAT_PAD));
+		//__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + (i * N_FEAT_PAD));
+
+		hvtype* datapoint_hv_ptr = (hvtype*) (training_input_vectors + (i * N_FEAT_PAD));
 
 		// Encode each input datapoitn
 		void* initialize_DFG = __hetero_launch(
@@ -303,7 +305,7 @@ int main(int argc, char** argv)
 			2 + 1,
 			/* Input Buffers: 2*/ 
 			rp_matrix_buffer, rp_matrix_size, //false,
-			&datapoint_hv, input_vector_size,
+			datapoint_hv_ptr, input_vector_size,
 			/* Output Buffers: 1*/ 
 			&encoded_hv, class_size,  //false,
 			1,
@@ -344,7 +346,9 @@ int main(int argc, char** argv)
 		for (int j = 0; j < N_SAMPLE; j++) {
 #endif
 
-			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + (j * N_FEAT_PAD));
+			//__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + (j * N_FEAT_PAD));
+
+            hvtype* datapoint_hv_ptr = (hvtype*) (training_input_vectors + (j * N_FEAT_PAD));
 
 			// Root node is: Encoding -> classing for a single HV.
 			void *DFG = __hetero_launch(
@@ -353,7 +357,7 @@ int main(int argc, char** argv)
 
 				/* Input Buffers: 4*/ 9,
 				rp_matrix_buffer, rp_matrix_size, //false,
-				&datapoint_hv, input_vector_size, //true,
+				datapoint_hv_ptr, input_vector_size, //true,
 				&classes, classes_size, //false,
 				/* Local Var Buffers 4*/
 				encoded_hv_buffer, encoded_hv_size,// false,
@@ -380,7 +384,9 @@ int main(int argc, char** argv)
 	for (int j = 0; j < N_TEST; j++) {
 
 
-			__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, inference_input_vectors + (j * N_FEAT_PAD));
+			//__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, inference_input_vectors + (j * N_FEAT_PAD));
+
+            hvtype* datapoint_hv_ptr = (hvtype*) (inference_input_vectors  + (j * N_FEAT_PAD));
 
             //printf("Data point %d\n", j);
             //ptr_print_hv((hvtype*) &datapoint_hv, N_FEAT);
@@ -389,7 +395,7 @@ int main(int argc, char** argv)
 				(void*) inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>,
 				/* Input Buffers: 3*/ 8,
 				rp_matrix_buffer, rp_matrix_size, //false,
-				&datapoint_hv, input_vector_size, //true,
+				datapoint_hv_ptr , input_vector_size, //true,
 				&classes, classes_size, //false,
 				/* Local Var Buffers 2*/
 				encoded_hv_buffer, encoded_hv_size,// false,
