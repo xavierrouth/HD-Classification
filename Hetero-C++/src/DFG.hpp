@@ -11,10 +11,10 @@
 #undef K
 
 typedef int binary;
-#ifndef HAMMING_DIST
+#ifndef ACCEL 
 typedef float hvtype;
 #else
-typedef int hvtype;
+typedef int16_t hvtype;
 #endif
 
 
@@ -266,10 +266,12 @@ void __attribute__ ((noinline)) classification_node_inference(
     #ifdef HAMMING_DIST
     *scores_ptr =  __hetero_hdc_hamming_distance<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
     #else
+#ifndef ACCEL
     *norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
     *scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
     *scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
     *scores_ptr = __hetero_hdc_absolute_value<K, hvtype>(*scores_ptr);
+#endif
     #endif
 
 
@@ -345,13 +347,13 @@ void classification_node_training_rest(/* Input Buffers: 2 */
     #ifdef HAMMING_DIST
     *scores_ptr =  __hetero_hdc_hamming_distance<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
     #else
-#if 0
-    *scores_ptr = __hetero_hdc_cossim<K, D, hvtype>(encoded_hv, classes);
-#endif
+
+#ifndef ACCEL
     *norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
     *scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
     *scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
     *scores_ptr = __hetero_hdc_absolute_value<K, hvtype>(*scores_ptr);
+#endif
     #endif
 
 
