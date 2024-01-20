@@ -74,6 +74,9 @@ void rp_encoding_node(/* Input Buffers: 2*/
         /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size,
         "inner_rp_encoding_task"
     );
+
+    __hetero_hint(DEVICE);
+
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
     encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
@@ -99,6 +102,8 @@ void rp_encoding_node_copy(/* Input Buffers: 2*/
         /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size,
         "inner_rp_encoding_task"
     );
+
+    __hetero_hint(DEVICE);
     
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
@@ -127,7 +132,7 @@ void InitialEncodingDFG(
         /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size,
         "initial_encoding_wrapper"
     );
-    
+
     // Specifies that the following node is performing an HDC Encoding step
     __hetero_hdc_encoding(6, (void*) rp_encoding_node_copy<D, N_FEATURES>, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size);
 
@@ -174,12 +179,13 @@ void gen_rp_matrix(/* Input Buffers*/
          shifted_matrix,   shifted_matrix_size,
          "gen_shifted_matrix_task");
 
-	for (int i = 0; i < N_FEATURES; i++) {
-		__hypervector__<D, hvtype>  row = __hetero_hdc_wrap_shift<D, hvtype>(*rp_seed_vector, i);
+    __hetero_hint(DEVICE);
+
+    for (int i = 0; i < N_FEATURES; i++) {
+    	__hypervector__<D, hvtype>  row = __hetero_hdc_wrap_shift<D, hvtype>(*rp_seed_vector, i);
         *row_buffer = row;
         __hetero_hdc_set_matrix_row<N_FEATURES, D, hvtype>(*shifted_matrix, row, i);
-
-	} 
+    } 
    __hetero_task_end(gen_shifted_task); 
    }
 
@@ -191,8 +197,9 @@ void gen_rp_matrix(/* Input Buffers*/
          /* Num Outputs */ 1,
          transposed_matrix,   transposed_matrix_size,
          "gen_tranpose_task");
-	 *transposed_matrix = __hetero_hdc_matrix_transpose<N_FEATURES, D, hvtype>(*shifted_matrix, N_FEATURES, D);
-   __hetero_task_end(transpose_task); 
+    __hetero_hint(DEVICE);
+    *transposed_matrix = __hetero_hdc_matrix_transpose<N_FEATURES, D, hvtype>(*shifted_matrix, N_FEATURES, D);
+    __hetero_task_end(transpose_task); 
    }
 
 
@@ -222,6 +229,7 @@ void rp_encoding_node_copy_copy(/* Input Buffers: 2*/
         "inner_rp_encoding_task"
     );
 
+    __hetero_hint(DEVICE);
     
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
@@ -256,6 +264,7 @@ void __attribute__ ((noinline)) classification_node_inference(
         /* Output Buffers: */ 1, scores_ptr, scores_size, "inference_calculate_score_task"
     );
 
+    __hetero_hint(DEVICE);
     
     // Class HVs are created via 'clustering' on +1, -1 encoded hypervectors. (loop 269).
     __hypervector__<D, hvtype> encoded_hv = *encoded_hv_ptr;
@@ -283,6 +292,9 @@ void __attribute__ ((noinline)) classification_node_inference(
         /* paramters: 1*/       encoded_hv_idx,
         /* Output Buffers: 1*/ 1,  label_ptr, label_size, "inference_find_max_task"
     );  
+
+    __hetero_hint(DEVICE);
+
     {
     __hypervector__<K, hvtype> scores = *scores_ptr;
     int max_idx = 0;
@@ -339,6 +351,9 @@ void classification_node_training_rest(/* Input Buffers: 2 */
         /* Input Buffers: */ 4, encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size, scores_ptr, scores_size, norms_ptr, norms_size, 
         /* Output Buffers: */ 1, scores_ptr, scores_size, "training_rest_scoring_task"
     );
+
+    __hetero_hint(DEVICE);
+
     __hypervector__<D, hvtype> encoded_hv = *encoded_hv_ptr;
     __hypermatrix__<K, D, hvtype> classes = *classes_ptr;
 
@@ -365,6 +380,9 @@ void classification_node_training_rest(/* Input Buffers: 2 */
         /* paramters: 1*/      
         /* Output Buffers: 1*/ 2,  classes_ptr, classes_size, argmax, argmax_size, "training_rest_find_score_task"
     );  
+
+    __hetero_hint(DEVICE);
+
     {
         __hypervector__<K, hvtype> scores = *scores_ptr;
 
@@ -398,6 +416,8 @@ void classification_node_training_rest(/* Input Buffers: 2 */
         /* paramters: 1*/       label,
         /* Output Buffers: 1*/ 1,  classes_ptr, classes_size, "update_classes_task"
     );  
+
+    //__hetero_hint(DEVICE);
 
     int max_idx = *argmax;
     // Update the correct and mispredicted class
