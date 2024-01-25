@@ -417,12 +417,11 @@ void classification_node_training_rest(/* Input Buffers: 2 */
         /* Output Buffers: 1*/ 1,  classes_ptr, classes_size, "update_classes_task"
     );  
 
-    //__hetero_hint(DEVICE);
+    __hetero_hint(DEVICE);
 
     int max_idx = *argmax;
     // Update the correct and mispredicted class
-    if (label != max_idx) {  // incorrect prediction)
-        
+    if (label != max_idx) { // Incorrect prediction
         *update_hv_ptr =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, label);
         *update_hv_ptr = __hetero_hdc_sum<D, hvtype>(*update_hv_ptr, *encoded_hv_ptr); // May need an instrinsic for this.
         __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, label); // How do we normalize?
