@@ -474,7 +474,8 @@ int main(int argc, char** argv)
     
 	std::cout << "Test accuracy = " << float(correct)/N_TEST << std::endl;
 
-
+#ifndef NODFG
 	__hpvm__cleanup();
+#endif	
 	return 0;
 }
