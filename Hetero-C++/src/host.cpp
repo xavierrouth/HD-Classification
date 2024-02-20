@@ -250,6 +250,7 @@ int main(int argc, char** argv)
 	hvtype* shifted_buffer = new hvtype[N_FEAT * Dhv];
 	hvtype* row_buffer = new hvtype[Dhv];
 
+	auto gen_rp_matrix_t_start = std::chrono::high_resolution_clock::now();
     void* GenRPMatDAG = __hetero_launch(
         (void*) gen_rp_matrix<Dhv,  N_FEAT>,
         4,
@@ -262,8 +263,11 @@ int main(int argc, char** argv)
         1,
         rp_matrix_buffer, sizeof(hvtype) * (N_FEAT * Dhv)
     );
-
     __hetero_wait(GenRPMatDAG);
+
+	auto gen_rp_matrix_t_elapsed = std::chrono::high_resolution_clock::now() - gen_rp_matrix_t_start;
+	long gen_rp_matrix_mSec = std::chrono::duration_cast<std::chrono::milliseconds>(gen_rp_matrix_t_elapsed).count();
+	std::cout << "gen_rp_matrix: " << gen_rp_matrix_mSec << " mSec" << std::endl;
 
     free(shifted_buffer);
     free(row_buffer);
@@ -293,6 +297,7 @@ int main(int argc, char** argv)
 
 	// Initialize class hvs.
 	std::cout << "Init class hvs:" << std::endl;
+	auto InitialEncodingDFG_t_start = std::chrono::high_resolution_clock::now();
 	for (int i = 0; i < N_SAMPLE; i++) {
 		//__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + (i * N_FEAT_PAD));
 
@@ -320,6 +325,9 @@ int main(int argc, char** argv)
 		update_hv = __hetero_hdc_sum<Dhv, hvtype>(update_hv, encoded_hv); 
 		__hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, update_hv, label); 
 	}
+	auto InitialEncodingDFG_t_elapsed = std::chrono::high_resolution_clock::now() - InitialEncodingDFG_t_start;
+	long InitialEncodingDFG_mSec = std::chrono::duration_cast<std::chrono::milliseconds>(InitialEncodingDFG_t_elapsed).count();
+	std::cout << "InitialEncodingDFG: " << InitialEncodingDFG_mSec << " mSec" << std::endl;
 
 	std::cout << "Done init class hvs:" << std::endl;
 
@@ -329,6 +337,7 @@ int main(int argc, char** argv)
 	// Training generates classes from labeled data. 
 	// ======= Training Rest Epochs ======= 
 
+	auto training_root_node_t_start = std::chrono::high_resolution_clock::now();
 	for (int i = 0; i < EPOCH; i++) {
 		// Can we normalize the hypervectors here or do we have to do that in the DFG.
 		std::cout << "Epoch: #" << i << std::endl;
@@ -375,10 +384,15 @@ int main(int argc, char** argv)
 		}
 
 	}
+	auto training_root_node_t_elapsed = std::chrono::high_resolution_clock::now() - training_root_node_t_start;
+	long training_root_node_mSec = std::chrono::duration_cast<std::chrono::milliseconds>(training_root_node_t_elapsed).count();
+	std::cout << "training_root_node: " << training_root_node_mSec << " mSec" << std::endl;
+
 	std::cout << "inference starting" << std::endl;
 
 	// ============ Inference =============== //
 	
+	auto inference_root_node_t_start = std::chrono::high_resolution_clock::now();
 	/* For each hypervector, inference calculates what class it is closest to and labels the hypervectorit accordingly.*/
 	for (int j = 0; j < N_TEST; j++) {
 
@@ -409,6 +423,9 @@ int main(int argc, char** argv)
 			__hetero_wait(DFG); 
 	
 		}
+	auto inference_root_node_t_elapsed = std::chrono::high_resolution_clock::now() - inference_root_node_t_start;
+	long inference_root_node_mSec = std::chrono::duration_cast<std::chrono::milliseconds>(inference_root_node_t_elapsed).count();
+	std::cout << "inference_root_node: " << inference_root_node_mSec << " mSec" << std::endl;
 	
 	std::cout << "After Inference" << std::endl;
 
