@@ -64,7 +64,7 @@ void rp_encoding_node(/* Input Buffers: 2*/
         __hypervector__<N_FEATURES, hvtype>* input_datapoint_ptr, size_t input_datapoint_size, // __hypervector__<N_FEATURES, int> 
         /* Output Buffers: 1*/
         __hypervector__<D, hvtype>* output_hv_ptr, size_t output_hv_size) { // __hypervector__<D, binary>
-    
+#ifndef NODFG
     void* section = __hetero_section_begin();
 
 
@@ -76,15 +76,18 @@ void rp_encoding_node(/* Input Buffers: 2*/
     );
 
     __hetero_hint(DEVICE);
+#endif
 
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
     encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
     *output_hv_ptr = encoded_hv;
 
+#ifndef NODFG
     __hetero_task_end(task); 
 
     __hetero_section_end(section);
+#endif
     return;
 }
 
@@ -95,6 +98,7 @@ void rp_encoding_node_copy(/* Input Buffers: 2*/
         /* Output Buffers: 1*/
         __hypervector__<D, hvtype>* output_hv_ptr, size_t output_hv_size) { // __hypervector__<D, binary>
     
+#ifndef NODFG
     void* section = __hetero_section_begin();
     void* task = __hetero_task_begin(
         /* Input Buffers: 2*/ 3, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size,
@@ -104,15 +108,18 @@ void rp_encoding_node_copy(/* Input Buffers: 2*/
     );
 
     __hetero_hint(DEVICE);
+#endif
     
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
 
     encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
     *output_hv_ptr = encoded_hv;
+#ifndef NODFG
     __hetero_task_end(task); 
 
     __hetero_section_end(section);
+#endif
     return;
 }
 
@@ -124,6 +131,7 @@ void InitialEncodingDFG(
         /* Output Buffers: 1*/
         __hypervector__<D, hvtype>* output_hv_ptr, size_t output_hv_size) { // __hypervector__<D, binary>
     
+#ifndef NODFG
     void* section = __hetero_section_begin();
 
     void* task = __hetero_task_begin(
@@ -132,13 +140,16 @@ void InitialEncodingDFG(
         /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size,
         "initial_encoding_wrapper"
     );
+#endif
 
     // Specifies that the following node is performing an HDC Encoding step
     __hetero_hdc_encoding(6, (void*) rp_encoding_node_copy<D, N_FEATURES>, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size);
 
+#ifndef NODFG
     __hetero_task_end(task); 
 
     __hetero_section_end(section);
+#endif
     return;
 }
 
@@ -152,6 +163,7 @@ void gen_rp_matrix(/* Input Buffers*/
         ){
 
 
+#ifndef NODFG
     void* root_section = __hetero_section_begin();
 
 
@@ -180,12 +192,14 @@ void gen_rp_matrix(/* Input Buffers*/
          "gen_shifted_matrix_task");
 
     __hetero_hint(DEVICE);
+#endif
 
     for (int i = 0; i < N_FEATURES; i++) {
     	__hypervector__<D, hvtype>  row = __hetero_hdc_wrap_shift<D, hvtype>(*rp_seed_vector, i);
         *row_buffer = row;
         __hetero_hdc_set_matrix_row<N_FEATURES, D, hvtype>(*shifted_matrix, row, i);
     } 
+#ifndef NODFG
    __hetero_task_end(gen_shifted_task); 
    }
 
@@ -198,7 +212,9 @@ void gen_rp_matrix(/* Input Buffers*/
          transposed_matrix,   transposed_matrix_size,
          "gen_tranpose_task");
     __hetero_hint(DEVICE);
+#endif
     *transposed_matrix = __hetero_hdc_matrix_transpose<N_FEATURES, D, hvtype>(*shifted_matrix, N_FEATURES, D);
+#ifndef NODFG
     __hetero_task_end(transpose_task); 
    }
 
@@ -208,6 +224,7 @@ void gen_rp_matrix(/* Input Buffers*/
    __hetero_task_end(root_task); 
 
    __hetero_section_end(root_section);
+#endif
 }
 
 
@@ -220,6 +237,7 @@ void rp_encoding_node_copy_copy(/* Input Buffers: 2*/
         /* Output Buffers: 1*/
         __hypervector__<D, hvtype>* output_hv_ptr, size_t output_hv_size) { // __hypervector__<D, binary>
     
+#ifndef NODFG
     void* section = __hetero_section_begin();
 
     void* task = __hetero_task_begin(
@@ -230,6 +248,7 @@ void rp_encoding_node_copy_copy(/* Input Buffers: 2*/
     );
 
     __hetero_hint(DEVICE);
+#endif
     
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
@@ -237,9 +256,11 @@ void rp_encoding_node_copy_copy(/* Input Buffers: 2*/
     encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
     *output_hv_ptr = encoded_hv;
 
+#ifndef NODFG
     __hetero_task_end(task); 
 
     __hetero_section_end(section);
+#endif
     return;
 }
 
@@ -257,6 +278,7 @@ void __attribute__ ((noinline)) classification_node_inference(
     int* label_ptr, size_t label_size ) {   
     // Read classes hvs from host.
 
+#ifndef NODFG
      void* section = __hetero_section_begin();
 
     void* task1 = __hetero_task_begin(
@@ -265,6 +287,7 @@ void __attribute__ ((noinline)) classification_node_inference(
     );
 
     __hetero_hint(DEVICE);
+#endif
     
     // Class HVs are created via 'clustering' on +1, -1 encoded hypervectors. (loop 269).
     __hypervector__<D, hvtype> encoded_hv = *encoded_hv_ptr;
@@ -285,6 +308,7 @@ void __attribute__ ((noinline)) classification_node_inference(
 
 
 
+#ifndef NODFG
     __hetero_task_end(task1);
 
     void* task2 = __hetero_task_begin(
@@ -295,6 +319,7 @@ void __attribute__ ((noinline)) classification_node_inference(
 
     __hetero_hint(DEVICE);
 
+#endif
     {
     __hypervector__<K, hvtype> scores = *scores_ptr;
     int max_idx = 0;
@@ -322,9 +347,11 @@ void __attribute__ ((noinline)) classification_node_inference(
     // Set the label to our guess 
     *label_ptr = max_idx; 
     }
+#ifndef NODFG
     __hetero_task_end(task2);
 
     __hetero_section_end(section);
+#endif
     return;
 }
 
@@ -345,6 +372,7 @@ void classification_node_training_rest(/* Input Buffers: 2 */
     
 
 
+#ifndef NODFG
     void* section = __hetero_section_begin();
 
     void* task1 = __hetero_task_begin(
@@ -353,6 +381,7 @@ void classification_node_training_rest(/* Input Buffers: 2 */
     );
 
     __hetero_hint(DEVICE);
+#endif
 
     __hypervector__<D, hvtype> encoded_hv = *encoded_hv_ptr;
     __hypermatrix__<K, D, hvtype> classes = *classes_ptr;
@@ -373,6 +402,7 @@ void classification_node_training_rest(/* Input Buffers: 2 */
 
 
 
+#ifndef NODFG
     __hetero_task_end(task1);
 
     void* task2 = __hetero_task_begin(
@@ -382,6 +412,7 @@ void classification_node_training_rest(/* Input Buffers: 2 */
     );  
 
     __hetero_hint(DEVICE);
+#endif
 
     {
         __hypervector__<K, hvtype> scores = *scores_ptr;
@@ -407,6 +438,7 @@ void classification_node_training_rest(/* Input Buffers: 2 */
             }
         } 
     }
+#ifndef NODFG
     __hetero_task_end(task2);
 
     
@@ -418,6 +450,7 @@ void classification_node_training_rest(/* Input Buffers: 2 */
     );  
 
     __hetero_hint(DEVICE);
+#endif
 
     int max_idx = *argmax;
     // Update the correct and mispredicted class
@@ -430,9 +463,11 @@ void classification_node_training_rest(/* Input Buffers: 2 */
         *update_hv_ptr = __hetero_hdc_sub<D, hvtype>(*update_hv_ptr, *encoded_hv_ptr); // May need an instrinsic for this.
         __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, max_idx); // How do we normalize?
     }
+#ifndef NODFG
     __hetero_task_end(task3);
 
     __hetero_section_end(section);
+#endif
 
 
     return;
@@ -456,6 +491,7 @@ void encoding_and_training_node( /* Input buffers: 3*/
                 /* Output Buffers: 1 (Classes)*/ 
                 ){
 
+#ifndef NODFG
     void* root_section = __hetero_section_begin();
 
     
@@ -466,9 +502,11 @@ void encoding_and_training_node( /* Input buffers: 3*/
         /* Output Buffers: 1 */ 1, encoded_hv_ptr, encoded_hv_size,
         "training_encoding_task"  
     );
+#endif
 
     rp_encoding_node<D, N_FEATURES>(rp_matrix_ptr, rp_matrix_size, datapoint_vec_ptr, datapoint_vec_size, encoded_hv_ptr, encoded_hv_size);
 
+#ifndef NODFG
     __hetero_task_end(encoding_task);
 
     void* training_task = __hetero_task_begin(
@@ -483,12 +521,15 @@ void encoding_and_training_node( /* Input buffers: 3*/
         /* Output Buffers: 2 */ 1, classes_ptr, classes_size, 
         "training_task"  
     );
+#endif
 
     classification_node_training_rest<D, K, N_VEC>(encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size, scores_ptr, scores_size, norms_ptr, norms_size,  update_hv_ptr, update_hv_size, argmax_ptr, argmax_size, label); 
 
+#ifndef NODFG
     __hetero_task_end(training_task);
 
     __hetero_section_end(root_section);
+#endif
     return;
 }
 
@@ -508,6 +549,7 @@ void training_root_node( /* Input buffers: 3*/
                 int label
                 /* Output Buffers: 1 (Classes)*/ 
                 ){
+#ifndef NODFG
     void* root_section = __hetero_section_begin();
 
     // Re-encode each iteration.
@@ -526,6 +568,7 @@ void training_root_node( /* Input buffers: 3*/
         encoded_hv_ptr, encoded_hv_size,
         "training_encoding_task_wrapper"  
     );
+#endif
 
     __hetero_hdc_training(
         18,
@@ -541,9 +584,11 @@ void training_root_node( /* Input buffers: 3*/
         argmax_ptr, argmax_size
     );
     
+#ifndef NODFG
     __hetero_task_end(training_encoding_task);
 
     __hetero_section_end(root_section);
+#endif
     return;
 }
 
@@ -564,6 +609,7 @@ void encoding_and_inference_node( /* Input buffers: 3*/
                 /* Output Buffers: 1*/
                 ){
 
+#ifndef NODFG
     void* root_section = __hetero_section_begin();
 
     // Re-encode each iteration.
@@ -573,8 +619,10 @@ void encoding_and_inference_node( /* Input buffers: 3*/
         /* Output Buffers: 1 */ 1, encoded_hv_ptr, encoded_hv_size,
         "inference_encoding_task"  
     );
+#endif
     rp_encoding_node_copy_copy<D, N_FEATURES>(rp_matrix_ptr, rp_matrix_size, datapoint_vec_ptr, datapoint_vec_size, encoded_hv_ptr, encoded_hv_size);
 
+#ifndef NODFG
     __hetero_task_end(encoding_task);
 
     void* inference_task = __hetero_task_begin(
@@ -588,12 +636,15 @@ void encoding_and_inference_node( /* Input buffers: 3*/
         /* Output Buffers: 1 */ 1, label_ptr, label_size,
         "inference_task"  
     );
+#endif
 
     classification_node_inference<D, K, N_VEC>(encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size, scores_ptr, scores_size,norms_ptr, norms_size , encoded_hv_idx, label_ptr, label_size); 
 
+#ifndef NODFG
     __hetero_task_end(inference_task);
 
     __hetero_section_end(root_section);
+#endif
     return;
 }
 
@@ -612,6 +663,7 @@ void inference_root_node( /* Input buffers: 3*/
                 /* Output Buffers: 1*/
                 int* label_ptr, size_t label_size){
 
+#ifndef NODFG
     void* root_section = __hetero_section_begin();
 
     // Re-encode each iteration.
@@ -628,7 +680,7 @@ void inference_root_node( /* Input buffers: 3*/
             /* Output Buffers: 1 */ 1,encoded_hv_ptr, encoded_hv_size,
             "inference_task"
             );
-
+#endif
 
     __hetero_hdc_inference(
         15,
@@ -644,7 +696,9 @@ void inference_root_node( /* Input buffers: 3*/
     );
 
 
+#ifndef NODFG
     __hetero_task_end(inference_task);
 
     __hetero_section_end(root_section);
+#endif
 }

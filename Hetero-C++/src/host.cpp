@@ -110,7 +110,9 @@ T initialize_rp_seed(size_t loop_index_var) {
 
 int main(int argc, char** argv)
 {
+#ifndef NODFG
 	__hpvm__init();
+#endif
 
 	auto t_start = std::chrono::high_resolution_clock::now();
 	std::cout << "Main Starting" << std::endl;
@@ -250,6 +252,7 @@ int main(int argc, char** argv)
 	hvtype* shifted_buffer = new hvtype[N_FEAT * Dhv];
 	hvtype* row_buffer = new hvtype[Dhv];
 
+#ifndef NODFG
     void* GenRPMatDAG = __hetero_launch(
         (void*) gen_rp_matrix<Dhv,  N_FEAT>,
         4,
@@ -264,6 +267,14 @@ int main(int argc, char** argv)
     );
 
     __hetero_wait(GenRPMatDAG);
+#else
+    gen_rp_matrix<Dhv, N_FEAT>(
+        &rp_seed, sizeof(hvtype) * Dhv,
+        (__hypervector__<Dhv, hvtype> *) row_buffer, sizeof(hvtype) * Dhv,
+        (__hypermatrix__<N_FEAT, Dhv, hvtype> *) shifted_buffer, sizeof(hvtype) * (N_FEAT * Dhv),
+        (__hypermatrix__<Dhv, N_FEAT, hvtype> *) rp_matrix_buffer, sizeof(hvtype) * (N_FEAT * Dhv)
+    );
+#endif
 
     free(shifted_buffer);
     free(row_buffer);
@@ -299,6 +310,7 @@ int main(int argc, char** argv)
 		hvtype* datapoint_hv_ptr = (hvtype*) (training_input_vectors + (i * N_FEAT_PAD));
 
 		// Encode each input datapoitn
+#ifndef NODFG
 		void* initialize_DFG = __hetero_launch(
 			(void*) InitialEncodingDFG<Dhv, N_FEAT>, //FIXME: Make this a copy. 
 			2 + 1,
@@ -312,6 +324,13 @@ int main(int argc, char** argv)
 		);
 
 		__hetero_wait(initialize_DFG);
+#else
+                InitialEncodingDFG<Dhv, N_FEAT>(
+		    (__hypermatrix__<Dhv, N_FEAT, hvtype> *) rp_matrix_buffer, rp_matrix_size,
+		    (__hypervector__<N_FEAT, hvtype> *) datapoint_hv_ptr, input_vector_size,
+		    &encoded_hv, class_size
+                );
+#endif
 
 		int label = training_labels[i];
 
@@ -350,6 +369,7 @@ int main(int argc, char** argv)
             hvtype* datapoint_hv_ptr = (hvtype*) (training_input_vectors + (j * N_FEAT_PAD));
 
 			// Root node is: Encoding -> classing for a single HV.
+#ifndef NODFG
 			void *DFG = __hetero_launch(
 
 				(void*) training_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>,
@@ -370,6 +390,19 @@ int main(int argc, char** argv)
 				&classes, classes_size
 			);
 			__hetero_wait(DFG); 
+#else
+                    training_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>(
+                        (__hypermatrix__<Dhv, N_FEAT, hvtype> *) rp_matrix_buffer, rp_matrix_size,
+                        (__hypervector__<N_FEAT, hvtype> *) datapoint_hv_ptr, input_vector_size,
+                        &classes, classes_size,
+                        (__hypervector__<Dhv, hvtype> *) encoded_hv_buffer, encoded_hv_size,
+                        (__hypervector__<N_CLASS, hvtype> *) scores_buffer, scores_size,
+                        (__hypervector__<N_CLASS, hvtype> *)norms_buffer, norms_size,
+                        &update_hv, update_hv_size,
+                        &argmax[0], sizeof(int),
+                        training_labels[j]
+                    );
+#endif
 
 	
 		}
@@ -390,6 +423,7 @@ int main(int argc, char** argv)
             //printf("Data point %d\n", j);
             //ptr_print_hv((hvtype*) &datapoint_hv, N_FEAT);
 			// Root node is: Encoding -> classing for a single HV.
+#ifndef NODFG
 			void *DFG = __hetero_launch(
 				(void*) inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>,
 				/* Input Buffers: 3*/ 8,
@@ -407,7 +441,18 @@ int main(int argc, char** argv)
 				inference_labels + j, sizeof(int) //, false
 			);
 			__hetero_wait(DFG); 
-	
+#else
+                    inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>(
+                        (__hypermatrix__<Dhv, N_FEAT, hvtype> *) rp_matrix_buffer, rp_matrix_size,
+                        (__hypervector__<N_FEAT, hvtype> *) datapoint_hv_ptr , input_vector_size,
+                        &classes, classes_size,
+                        (__hypervector__<Dhv, hvtype> *) encoded_hv_buffer, encoded_hv_size,
+                        (__hypervector__<N_CLASS, hvtype> *) scores_buffer, scores_size,
+                        (__hypervector__<N_CLASS, hvtype> *) norms_buffer, norms_size,
+                        j, 
+                        inference_labels + j, sizeof(int)
+                    );
+#endif	
 		}
 	
 	std::cout << "After Inference" << std::endl;
