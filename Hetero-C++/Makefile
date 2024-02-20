@@ -25,7 +25,7 @@ host-accel: build/output.accel.ll
 
 # Clang Frontend to IR
 build/host.accel.ll: src/host.cpp
-	$(HPVM_BIN)/clang++ -DHPVM -DACCEL-DDEVICE=hpvm::CPU_TARGET $(CFLAGS) $(INCLUDES) -S -emit-llvm $^ -o $@ 
+	$(HPVM_BIN)/clang++ -DHPVM -DDEVICE=hpvm::CPU_TARGET $(CFLAGS) $(INCLUDES) -S -emit-llvm $^ -o $@ 
 
 # GenHPVM for HDC only and mem2reg
 build/hpvm.genhdc.accel.ll: build/host.accel.ll
