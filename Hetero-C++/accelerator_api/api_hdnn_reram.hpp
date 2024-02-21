@@ -178,7 +178,7 @@ void sim_hdnn_reram::init_enc_mat() {
 
 void sim_hdnn_reram::init_buffer() {
   feature_mem = new int16_t[dim_feature];
-  class_mem = new int16_t[dim_hv * num_class];
+  class_mem = new int16_t[static_cast<uint64_t>(dim_hv) * num_class];
   score_mem = new int16_t[num_class];
 }
 

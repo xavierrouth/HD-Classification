@@ -276,8 +276,8 @@ int main(int argc, char** argv)
     );
 #endif
 
-    free(shifted_buffer);
-    free(row_buffer);
+    delete[] shifted_buffer;
+    delete[] row_buffer;
 
 
 #else
