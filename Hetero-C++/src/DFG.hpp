@@ -5,6 +5,7 @@
 #include <iostream>
 
 //#define HAMMING_DIST
+#define LOOP_INTRINSICS
 
 #undef D
 #undef N_FEATURES
@@ -546,7 +547,12 @@ void training_root_node( /* Input buffers: 3*/
                 __hypervector__<D, hvtype>* update_hv_ptr, size_t update_hv_size,  // Used in second stage of clustering node for extracting and accumulating
                 int* argmax_ptr, size_t argmax_size,
                 /* Parameters: 1*/
-                int label
+#ifndef LOOP_INTRINSICS
+                int label, 
+#else
+		int* labels_ptr, size_t labels_size,
+#endif
+		int EPOCH, int N_SAMPLES
                 /* Output Buffers: 1 (Classes)*/ 
                 ){
 #ifndef NODFG
@@ -554,7 +560,7 @@ void training_root_node( /* Input buffers: 3*/
 
     // Re-encode each iteration.
     void* training_encoding_task = __hetero_task_begin(
-        /* Input Buffers: 3 */ 9, 
+        /* Input Buffers: 3 */ 11, 
             rp_matrix_ptr, rp_matrix_size, 
             datapoint_vec_ptr, datapoint_vec_size, 
             encoded_hv_ptr, encoded_hv_size,  
@@ -563,13 +569,19 @@ void training_root_node( /* Input buffers: 3*/
             norms_ptr, norms_size,
             update_hv_ptr, update_hv_size,
             argmax_ptr, argmax_size,
-            label,
+#ifndef LOOP_INTRINSICS
+            label, 
+#else
+            labels_ptr, labels_size,
+#endif
+            EPOCH, N_SAMPLES,
         /* Output Buffers: 1 */ 1, 
         encoded_hv_ptr, encoded_hv_size,
         "training_encoding_task_wrapper"  
     );
 #endif
 
+#ifndef LOOP_INTRINSICS
     __hetero_hdc_training(
         18,
         (void*) encoding_and_training_node<D, K, N_VEC, N_FEATURES>,
@@ -583,6 +595,22 @@ void training_root_node( /* Input buffers: 3*/
         update_hv_ptr, update_hv_size,
         argmax_ptr, argmax_size
     );
+#else
+    __hetero_hdc_training_loop(
+        20,
+        (void*) encoding_and_training_node<D, K, N_VEC, N_FEATURES>,
+        EPOCH, N_SAMPLES,
+        rp_matrix_ptr, rp_matrix_size, 
+        datapoint_vec_ptr, datapoint_vec_size, 
+        classes_ptr, classes_size, 
+        labels_ptr, labels_size,
+        encoded_hv_ptr, encoded_hv_size,  
+        scores_ptr, scores_size,
+        norms_ptr, norms_size,
+        update_hv_ptr, update_hv_size,
+        argmax_ptr, argmax_size
+    );
+#endif
     
 #ifndef NODFG
     __hetero_task_end(training_encoding_task);

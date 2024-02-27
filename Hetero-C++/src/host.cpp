@@ -177,6 +177,7 @@ int main(int argc, char** argv)
 	
 	std::vector<hvtype> temp_vec(X_train.begin(), X_train.end());
 	hvtype* training_input_vectors = temp_vec.data();
+        size_t training_input_size = temp_vec.size() * sizeof(hvtype);
 
 	// N_FEAT is number of entries per vector
 	size_t input_vector_size = N_FEAT * sizeof(hvtype); // Size of a single vector
@@ -348,6 +349,7 @@ int main(int argc, char** argv)
 	// Training generates classes from labeled data. 
 	// ======= Training Rest Epochs ======= 
 
+#ifndef LOOP_INTRINSICS
 	for (int i = 0; i < EPOCH; i++) {
 		// Can we normalize the hypervectors here or do we have to do that in the DFG.
 		std::cout << "Epoch: #" << i << std::endl;
@@ -367,6 +369,7 @@ int main(int argc, char** argv)
 			//__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + (j * N_FEAT_PAD));
 
             hvtype* datapoint_hv_ptr = (hvtype*) (training_input_vectors + (j * N_FEAT_PAD));
+#endif
 
 			// Root node is: Encoding -> classing for a single HV.
 #ifndef NODFG
@@ -374,17 +377,26 @@ int main(int argc, char** argv)
 
 				(void*) training_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>,
 
-				/* Input Buffers: 4*/ 9,
+				/* Input Buffers: 4*/ 11,
 				rp_matrix_buffer, rp_matrix_size, //false,
+#ifndef LOOP_INTRINSICS
 				datapoint_hv_ptr, input_vector_size, //true,
+#else
+				training_input_vectors, training_input_size,
+#endif
 				&classes, classes_size, //false,
 				/* Local Var Buffers 4*/
 				encoded_hv_buffer, encoded_hv_size,// false,
 				scores_buffer, scores_size,
 				norms_buffer, norms_size,
-                &update_hv, update_hv_size,
+                		&update_hv, update_hv_size,
 				&argmax[0], sizeof(int),
-				training_labels[j], 
+#ifndef LOOP_INTRINSICS
+				training_labels[j],
+#else
+				training_labels, training_labels_size,
+#endif
+				EPOCH, N_SAMPLE,
 				/* Output Buffers: 1*/ 
 				1,
 				&classes, classes_size
@@ -393,21 +405,31 @@ int main(int argc, char** argv)
 #else
                     training_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>(
                         (__hypermatrix__<Dhv, N_FEAT, hvtype> *) rp_matrix_buffer, rp_matrix_size,
+#ifndef LOOP_INTRINSICS
                         (__hypervector__<N_FEAT, hvtype> *) datapoint_hv_ptr, input_vector_size,
+#else
+                        (__hypervector__<N_FEAT, hvtype> *) training_input_vectors, training_input_size,
+#endif
                         &classes, classes_size,
                         (__hypervector__<Dhv, hvtype> *) encoded_hv_buffer, encoded_hv_size,
                         (__hypervector__<N_CLASS, hvtype> *) scores_buffer, scores_size,
                         (__hypervector__<N_CLASS, hvtype> *)norms_buffer, norms_size,
                         &update_hv, update_hv_size,
                         &argmax[0], sizeof(int),
-                        training_labels[j]
+#ifndef LOOP_INTRINSICS
+			training_labels[j],
+#else
+			training_labels, training_labels_size,
+#endif
+			EPOCH, N_SAMPLE
                     );
 #endif
-
 	
+#ifndef LOOP_INTRINSICS
 		}
-
 	}
+#endif
+
 	std::cout << "inference starting" << std::endl;
 
 	// ============ Inference =============== //
