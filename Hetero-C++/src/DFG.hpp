@@ -5,7 +5,7 @@
 #include <iostream>
 
 //#define HAMMING_DIST
-#define LOOP_INTRINSICS
+//#define LOOP_INTRINSICS
 
 #undef D
 #undef N_FEATURES
