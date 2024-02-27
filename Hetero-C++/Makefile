@@ -21,7 +21,7 @@ CFLAGS := -O1 -fenable-matrix -fno-discard-value-names -fno-exceptions -lm -lrt 
 
 # Generate Executable
 host-accel: build/hdc.lowered.accel.ll accelerator_api/hpvm_interface.cpp accelerator_api/api_hdnn_reram.hpp
-	$(HPVM_INSTALL_DIR)/build/bin/clang++ -I$(OPENCL_PATH)/include/CL -L$(OPENCL_LIB_PATH) -lm -lrt -pthread -lOpenCL -g -Ofast -march=native $< accelerator_api/hpvm_interface.cpp   -o $@ 
+	$(HPVM_INSTALL_DIR)/build/bin/clang++ -lm -lrt -g -Ofast -march=native $< accelerator_api/hpvm_interface.cpp   -o $@ 
 
 # Clang Frontend to IR
 build/host.accel.ll: src/host.cpp
