@@ -5,7 +5,7 @@
 #include <iostream>
 
 //#define HAMMING_DIST
-//#define LOOP_INTRINSICS
+#define LOOP_INTRINSICS
 
 #undef D
 #undef N_FEATURES
@@ -559,7 +559,7 @@ void training_root_node( /* Input buffers: 3*/
     void* root_section = __hetero_section_begin();
 
     // Re-encode each iteration.
-    void* training_encoding_task = __hetero_task_begin(
+    void* root_task = __hetero_task_begin(
         /* Input Buffers: 3 */ 11, 
             rp_matrix_ptr, rp_matrix_size, 
             datapoint_vec_ptr, datapoint_vec_size, 
@@ -577,7 +577,7 @@ void training_root_node( /* Input buffers: 3*/
             EPOCH, N_SAMPLES,
         /* Output Buffers: 1 */ 1, 
         encoded_hv_ptr, encoded_hv_size,
-        "training_encoding_task_wrapper"  
+        "root_task"  
     );
 #endif
 
@@ -596,6 +596,26 @@ void training_root_node( /* Input buffers: 3*/
         argmax_ptr, argmax_size
     );
 #else
+#ifndef NODFG
+    void* device_section = __hetero_section_begin();
+    void* device_task = __hetero_task_begin(
+        /* Input Buffers: 3 */ 11, 
+            rp_matrix_ptr, rp_matrix_size, 
+            datapoint_vec_ptr, datapoint_vec_size, 
+            encoded_hv_ptr, encoded_hv_size,  
+            classes_ptr, classes_size, 
+            scores_ptr, scores_size,
+            norms_ptr, norms_size,
+            update_hv_ptr, update_hv_size,
+            argmax_ptr, argmax_size,
+            labels_ptr, labels_size,
+            EPOCH, N_SAMPLES,
+        /* Output Buffers: 1 */ 1, 
+        encoded_hv_ptr, encoded_hv_size,
+        "device_task"  
+    );
+    __hetero_hint(DEVICE);
+#endif
     __hetero_hdc_training_loop(
         20,
         (void*) encoding_and_training_node<D, K, N_VEC, N_FEATURES>,
@@ -610,10 +630,15 @@ void training_root_node( /* Input buffers: 3*/
         update_hv_ptr, update_hv_size,
         argmax_ptr, argmax_size
     );
+#ifndef NODFG
+    __hetero_task_end(device_task);
+
+    __hetero_section_end(device_section);
+#endif
 #endif
     
 #ifndef NODFG
-    __hetero_task_end(training_encoding_task);
+    __hetero_task_end(root_task);
 
     __hetero_section_end(root_section);
 #endif
