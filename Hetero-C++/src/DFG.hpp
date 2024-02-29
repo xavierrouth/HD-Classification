@@ -79,9 +79,10 @@ void rp_encoding_node(/* Input Buffers: 2*/
     __hetero_hint(DEVICE);
 #endif
 
-    __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
-    *output_hv_ptr = encoded_hv;
-    encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
+    // This zero initialization should no longer be needed as matmul self-initializes with 0
+    //__hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
+    // *output_hv_ptr = encoded_hv;
+    __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
     *output_hv_ptr = encoded_hv;
 
 #ifndef NODFG
@@ -111,10 +112,13 @@ void rp_encoding_node_copy(/* Input Buffers: 2*/
     __hetero_hint(DEVICE);
 #endif
     
+    // This zero initialization should no longer be needed as matmul self-initializes with 0
+    /*
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
+    */
 
-    encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
+    __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
     *output_hv_ptr = encoded_hv;
 #ifndef NODFG
     __hetero_task_end(task); 
@@ -251,10 +255,13 @@ void rp_encoding_node_copy_copy(/* Input Buffers: 2*/
     __hetero_hint(DEVICE);
 #endif
     
+    // This zero initialization should no longer be needed as matmul self-initializes with 0
+    /*
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
+    */
 
-    encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
+    __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
     *output_hv_ptr = encoded_hv;
 
 #ifndef NODFG
@@ -456,6 +463,16 @@ void classification_node_training_rest(/* Input Buffers: 2 */
     int max_idx = *argmax;
     // Update the correct and mispredicted class
     if (label != max_idx) { // Incorrect prediction
+
+        auto label_row =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, label);
+        *update_hv_ptr = __hetero_hdc_sum<D, hvtype>(label_row, *encoded_hv_ptr); // May need an instrinsic for this.
+        __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, label); // How do we normalize?
+
+        auto max_idx_row =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, max_idx);
+        *update_hv_ptr = __hetero_hdc_sub<D, hvtype>(max_idx_row, *encoded_hv_ptr); // May need an instrinsic for this.
+        __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, max_idx); // How do we normalize?
+
+        /*
         *update_hv_ptr =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, label);
         *update_hv_ptr = __hetero_hdc_sum<D, hvtype>(*update_hv_ptr, *encoded_hv_ptr); // May need an instrinsic for this.
         __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, label); // How do we normalize?
@@ -463,6 +480,7 @@ void classification_node_training_rest(/* Input Buffers: 2 */
         *update_hv_ptr =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, max_idx);
         *update_hv_ptr = __hetero_hdc_sub<D, hvtype>(*update_hv_ptr, *encoded_hv_ptr); // May need an instrinsic for this.
         __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, max_idx); // How do we normalize?
+        */
     }
 #ifndef NODFG
     __hetero_task_end(task3);

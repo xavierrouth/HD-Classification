@@ -34,7 +34,7 @@ int train = 3; // number of training epochs (0 = inference)
 
 #define N_FEAT_PAD		(N_FEAT + PAD)	//feature per input (e.g., isolet: 624, ucihar 568)
 
-#define QUANT
+//#define QUANT
 
 #ifdef QUANT
 // TODO: Add these to directory.

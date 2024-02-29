@@ -190,7 +190,7 @@ int main(int argc, char** argv)
 	int inference_labels[N_TEST];
 	size_t inference_labels_size = N_TEST * sizeof(int);
 
-#if hvtype == int
+#if 0 //hvtype == int
 	int* inference_input_vectors = X_test.data();
 #else
 	// TRAINING DATA INITIALZIATION
