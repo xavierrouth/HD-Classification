@@ -5,7 +5,6 @@
 #include <iostream>
 
 //#define HAMMING_DIST
-#define LOOP_INTRINSICS
 
 #undef D
 #undef N_FEATURES
@@ -558,19 +557,14 @@ void training_root_node( /* Input buffers: 3*/
                 __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, // __hypermatrix__<N_FEATURES, D, binary>
                 __hypervector__<N_FEATURES, hvtype>* datapoint_vec_ptr, size_t datapoint_vec_size, // Features
                  __hypermatrix__<K, D, hvtype>* classes_ptr, size_t classes_size, // __hypermatrix__<K, D, binary> // Also an output.
+                /* Parameters: 1*/
+                int label,
                 /* Local Vars: 3 */
                 __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, // // __hypervector__<D, binary>
                 __hypervector__<K, hvtype>* scores_ptr, size_t scores_size,
                 __hypervector__<K, hvtype>* norms_ptr, size_t norms_size,
                 __hypervector__<D, hvtype>* update_hv_ptr, size_t update_hv_size,  // Used in second stage of clustering node for extracting and accumulating
-                int* argmax_ptr, size_t argmax_size,
-                /* Parameters: 1*/
-#ifndef LOOP_INTRINSICS
-                int label, 
-#else
-		int* labels_ptr, size_t labels_size,
-#endif
-		int EPOCH, int N_SAMPLES
+                int* argmax_ptr, size_t argmax_size
                 /* Output Buffers: 1 (Classes)*/ 
                 ){
 #ifndef NODFG
@@ -578,7 +572,7 @@ void training_root_node( /* Input buffers: 3*/
 
     // Re-encode each iteration.
     void* root_task = __hetero_task_begin(
-        /* Input Buffers: 3 */ 11, 
+        /* Input Buffers: 3 */ 9, 
             rp_matrix_ptr, rp_matrix_size, 
             datapoint_vec_ptr, datapoint_vec_size, 
             encoded_hv_ptr, encoded_hv_size,  
@@ -587,22 +581,14 @@ void training_root_node( /* Input buffers: 3*/
             norms_ptr, norms_size,
             update_hv_ptr, update_hv_size,
             argmax_ptr, argmax_size,
-#ifndef LOOP_INTRINSICS
             label, 
-#else
-            labels_ptr, labels_size,
-#endif
-            EPOCH, N_SAMPLES,
         /* Output Buffers: 1 */ 1, 
         encoded_hv_ptr, encoded_hv_size,
         "root_task"  
     );
 #endif
 
-#ifndef LOOP_INTRINSICS
-    __hetero_hdc_training(
-        18,
-        (void*) encoding_and_training_node<D, K, N_VEC, N_FEATURES>,
+    encoding_and_training_node<D, K, N_VEC, N_FEATURES>(
         rp_matrix_ptr, rp_matrix_size, 
         datapoint_vec_ptr, datapoint_vec_size, 
         classes_ptr, classes_size, 
@@ -613,47 +599,6 @@ void training_root_node( /* Input buffers: 3*/
         update_hv_ptr, update_hv_size,
         argmax_ptr, argmax_size
     );
-#else
-#ifndef NODFG
-    void* device_section = __hetero_section_begin();
-    void* device_task = __hetero_task_begin(
-        /* Input Buffers: 3 */ 11, 
-            rp_matrix_ptr, rp_matrix_size, 
-            datapoint_vec_ptr, datapoint_vec_size, 
-            encoded_hv_ptr, encoded_hv_size,  
-            classes_ptr, classes_size, 
-            scores_ptr, scores_size,
-            norms_ptr, norms_size,
-            update_hv_ptr, update_hv_size,
-            argmax_ptr, argmax_size,
-            labels_ptr, labels_size,
-            EPOCH, N_SAMPLES,
-        /* Output Buffers: 1 */ 1, 
-        encoded_hv_ptr, encoded_hv_size,
-        "device_task"  
-    );
-    __hetero_hint(DEVICE);
-#endif
-    __hetero_hdc_training_loop(
-        20,
-        (void*) encoding_and_training_node<D, K, N_VEC, N_FEATURES>,
-        EPOCH, N_SAMPLES,
-        rp_matrix_ptr, rp_matrix_size, 
-        datapoint_vec_ptr, datapoint_vec_size, 
-        classes_ptr, classes_size, 
-        labels_ptr, labels_size,
-        encoded_hv_ptr, encoded_hv_size,  
-        scores_ptr, scores_size,
-        norms_ptr, norms_size,
-        update_hv_ptr, update_hv_size,
-        argmax_ptr, argmax_size
-    );
-#ifndef NODFG
-    __hetero_task_end(device_task);
-
-    __hetero_section_end(device_section);
-#endif
-#endif
     
 #ifndef NODFG
     __hetero_task_end(root_task);
