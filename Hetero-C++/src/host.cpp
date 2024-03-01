@@ -359,54 +359,22 @@ int main(int argc, char** argv)
 		norms_buffer, norms_size,
 		&update_hv, update_hv_size,
 		&argmax[0], sizeof(int)
-		);
+	);
 
 	std::cout << "inference starting" << std::endl;
 
 	// ============ Inference =============== //
-	
-	/* For each hypervector, inference calculates what class it is closest to and labels the hypervectorit accordingly.*/
-	for (int j = 0; j < N_TEST; j++) {
 
-
-			//__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, inference_input_vectors + (j * N_FEAT_PAD));
-
-            hvtype* datapoint_hv_ptr = (hvtype*) (inference_input_vectors  + (j * N_FEAT_PAD));
-
-            //printf("Data point %d\n", j);
-            //ptr_print_hv((hvtype*) &datapoint_hv, N_FEAT);
-			// Root node is: Encoding -> classing for a single HV.
-#ifndef NODFG
-			void *DFG = __hetero_launch(
-				(void*) inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>,
-				/* Input Buffers: 3*/ 8,
-				rp_matrix_buffer, rp_matrix_size, //false,
-				datapoint_hv_ptr , input_vector_size, //true,
-				&classes, classes_size, //false,
-				/* Local Var Buffers 2*/
-				encoded_hv_buffer, encoded_hv_size,// false,
-				scores_buffer, scores_size,
-				norms_buffer, norms_size,
-				j, 
-				/* Output Buffers: 1*/ 
-				inference_labels + j, sizeof(int),
-				1,
-				inference_labels + j, sizeof(int) //, false
-			);
-			__hetero_wait(DFG); 
-#else
-                    inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>(
-                        (__hypermatrix__<Dhv, N_FEAT, hvtype> *) rp_matrix_buffer, rp_matrix_size,
-                        (__hypervector__<N_FEAT, hvtype> *) datapoint_hv_ptr , input_vector_size,
-                        &classes, classes_size,
-                        (__hypervector__<Dhv, hvtype> *) encoded_hv_buffer, encoded_hv_size,
-                        (__hypervector__<N_CLASS, hvtype> *) scores_buffer, scores_size,
-                        (__hypervector__<N_CLASS, hvtype> *) norms_buffer, norms_size,
-                        j, 
-                        inference_labels + j, sizeof(int)
-                    );
-#endif	
-		}
+	__hetero_hdc_inference_loop(17, (void*) inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>,
+		N_TEST, N_FEAT, N_FEAT_PAD,
+		rp_matrix_buffer, rp_matrix_size,
+		inference_input_vectors, input_vector_size,
+		&classes, classes_size,
+		inference_labels,
+		encoded_hv_buffer, encoded_hv_size,
+		scores_buffer, scores_size,
+		norms_buffer, norms_size
+	);
 	
 	std::cout << "After Inference" << std::endl;
 

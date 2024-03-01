@@ -670,14 +670,15 @@ void inference_root_node( /* Input buffers: 3*/
                 __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, // __hypermatrix__<N_FEATURES, D, binary>
                 __hypervector__<N_FEATURES, hvtype>* datapoint_vec_ptr, size_t datapoint_vec_size, // Features
                 __hypermatrix__<K, D, hvtype>* classes_ptr, size_t classes_size, // __hypermatrix__<K, D, binary>
+                /* Output Buffers: 1*/
+                int* label_ptr, size_t label_size,
                 /* Local Vars: 2*/
                 __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, // // __hypervector__<D, binary>
                 __hypervector__<K, hvtype>* scores_ptr, size_t scores_size,
                 __hypervector__<K, hvtype>* norms_ptr, size_t norms_size,
                 /* Parameters: 1*/
-                int encoded_hv_idx,
-                /* Output Buffers: 1*/
-                int* label_ptr, size_t label_size){
+                int encoded_hv_idx
+){
 
 #ifndef NODFG
     void* root_section = __hetero_section_begin();
