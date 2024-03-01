@@ -350,13 +350,13 @@ int main(int argc, char** argv)
 	__hetero_hdc_training_loop(
 		22, (void*) training_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>,
 		EPOCH, N_SAMPLE, N_FEAT, N_FEAT_PAD,
-		(__hypermatrix__<Dhv, N_FEAT, hvtype> *) rp_matrix_buffer, rp_matrix_size,
-		(__hypervector__<N_FEAT, hvtype> *) training_input_vectors, input_vector_size,
+		rp_matrix_buffer, rp_matrix_size,
+		training_input_vectors, input_vector_size,
 		&classes, classes_size,
 		training_labels,
-		(__hypervector__<Dhv, hvtype> *) encoded_hv_buffer, encoded_hv_size,
-		(__hypervector__<N_CLASS, hvtype> *) scores_buffer, scores_size,
-		(__hypervector__<N_CLASS, hvtype> *) norms_buffer, norms_size,
+		encoded_hv_buffer, encoded_hv_size,
+		scores_buffer, scores_size,
+		norms_buffer, norms_size,
 		&update_hv, update_hv_size,
 		&argmax[0], sizeof(int)
 		);
