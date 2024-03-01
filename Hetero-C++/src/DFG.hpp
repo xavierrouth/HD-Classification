@@ -10,7 +10,6 @@
 #undef N_FEATURES
 #undef K
 
-typedef int binary;
 #ifndef ACCEL 
 typedef float hvtype;
 #else
