@@ -305,37 +305,6 @@ int main(int argc, char** argv)
 	// ============ Training ===============
 
 	// Initialize class hvs.
-	std::cout << "Init class hvs:" << std::endl;
-#if 0
-	for (int i = 0; i < N_SAMPLE; i++) {
-		//__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + (i * N_FEAT_PAD));
-
-		hvtype* datapoint_hv_ptr = (hvtype*) (training_input_vectors + (i * N_FEAT_PAD));
-
-		// Encode each input datapoitn
-#ifndef NODFG
-		void* initialize_DFG = __hetero_launch(
-			(void*) InitialEncodingDFG<Dhv, N_FEAT>, //FIXME: Make this a copy. 
-			2 + 1,
-			/* Input Buffers: 2*/ 
-			rp_matrix_buffer, rp_matrix_size, //false,
-			datapoint_hv_ptr, input_vector_size,
-			/* Output Buffers: 1*/ 
-			&encoded_hv[i], class_size,  //false,
-			1,
-			&encoded_hv[i], class_size //false
-		);
-
-		__hetero_wait(initialize_DFG);
-#else
-                InitialEncodingDFG<Dhv, N_FEAT>(
-		    (__hypermatrix__<Dhv, N_FEAT, hvtype> *) rp_matrix_buffer, rp_matrix_size,
-		    (__hypervector__<N_FEAT, hvtype> *) datapoint_hv_ptr, input_vector_size,
-		    &encoded_hv[i], class_size
-                );
-#endif
-	}
-#else
 	__hetero_hdc_encoding_loop(
 		0, (void*) InitialEncodingDFG<Dhv, N_FEAT>,
 		N_SAMPLE, N_FEAT, N_FEAT_PAD,
@@ -343,7 +312,6 @@ int main(int argc, char** argv)
 		training_input_vectors, input_vector_size,
 		encoded_hv, class_size
 	);
-#endif
 
 	for (int i = 0; i < N_SAMPLE; i++) {
 		int label = training_labels[i];
@@ -352,11 +320,7 @@ int main(int argc, char** argv)
 		__hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, update_hv, label); 
 	}
 
-	std::cout << "Done init class hvs:" << std::endl;
-
-
 	int argmax[1];
-
 	// Training generates classes from labeled data. 
 	// ======= Training Rest Epochs ======= 
 
@@ -374,8 +338,6 @@ int main(int argc, char** argv)
 		&argmax[0], sizeof(int)
 	);
 
-	std::cout << "inference starting" << std::endl;
-
 	// ============ Inference =============== //
 
 	__hetero_hdc_inference_loop(17, (void*) inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>,
@@ -388,25 +350,25 @@ int main(int argc, char** argv)
 		scores_buffer, scores_size,
 		norms_buffer, norms_size
 	);
-	
-	std::cout << "After Inference" << std::endl;
 
+	//std::ofstream myfile("out.txt");
+
+	int correct = 0;
+	for(int i = 0; i < N_TEST; i++) {
+		//myfile << y_test[i] << " " << inference_labels[i] << std::endl;
+		if(inference_labels[i] == y_test[i])
+			correct += 1;
+	}
+
+	float test_accuracy = float(correct)/N_TEST;
+    
 	t_elapsed = std::chrono::high_resolution_clock::now() - t_start;
 	
 	mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_elapsed).count();
 
 	std::cout << "Overall Benchmark took " << mSec << " mSec" << std::endl;
 
-	std::ofstream myfile("out.txt");
-
-	int correct = 0;
-	for(int i = 0; i < N_TEST; i++) {
-		myfile << y_test[i] << " " << inference_labels[i] << std::endl;
-		if(inference_labels[i] == y_test[i])
-			correct += 1;
-	}
-    
-	std::cout << "Test accuracy = " << float(correct)/N_TEST << std::endl;
+	std::cout << "Test accuracy = " << test_accuracy << std::endl;
 
 #ifndef NODFG
 	__hpvm__cleanup();
