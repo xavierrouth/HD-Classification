@@ -302,7 +302,9 @@ void __attribute__ ((noinline)) classification_node_inference(
     __hypervector__<K, hvtype> scores = *scores_ptr; // Precision of these scores might need to be increased.
 
     #ifdef HAMMING_DIST
-    *scores_ptr =  __hetero_hdc_hamming_distance<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
+    __hypervector__<K, hvtype> score =  __hetero_hdc_hamming_distance<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
+    *scores_ptr = score;
+    //__hetero_hdc_sim_approx(score, 0, D, 1);
     #else
 #ifndef ACCEL
     *norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
@@ -395,7 +397,9 @@ void classification_node_training_rest(/* Input Buffers: 2 */
     __hypervector__<K, hvtype> scores = *scores_ptr; // Precision of these scores might need to be increased.
 
     #ifdef HAMMING_DIST
-    *scores_ptr =  __hetero_hdc_hamming_distance<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
+    __hypervector__<K, hvtype> score =  __hetero_hdc_hamming_distance<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
+    *scores_ptr = score;
+    //__hetero_hdc_sim_approx(score, 0, D, 1);
     #else
 
 #ifndef ACCEL
