@@ -306,6 +306,7 @@ int main(int argc, char** argv)
 
 	// Initialize class hvs.
 	std::cout << "Init class hvs:" << std::endl;
+#if 0
 	for (int i = 0; i < N_SAMPLE; i++) {
 		//__hypervector__<N_FEAT, hvtype> datapoint_hv = __hetero_hdc_create_hypervector<N_FEAT, hvtype>(1, (void*) initialize_hv<hvtype>, training_input_vectors + (i * N_FEAT_PAD));
 
@@ -334,6 +335,15 @@ int main(int argc, char** argv)
                 );
 #endif
 	}
+#else
+	__hetero_hdc_encoding_loop(
+		0, (void*) InitialEncodingDFG<Dhv, N_FEAT>,
+		N_SAMPLE, N_FEAT, N_FEAT_PAD,
+		rp_matrix_buffer, rp_matrix_size,
+		training_input_vectors, input_vector_size,
+		encoded_hv, class_size
+	);
+#endif
 
 	for (int i = 0; i < N_SAMPLE; i++) {
 		int label = training_labels[i];
