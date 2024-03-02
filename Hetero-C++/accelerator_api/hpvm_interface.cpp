@@ -1,6 +1,7 @@
-
 #include <stdlib.h>
 #include "api_hdnn_reram.hpp"
+
+//#define TRACE
 
 sim_hdnn_reram *ins_hdnn_reram = nullptr;
 
@@ -11,26 +12,30 @@ sim_hdnn_reram *ins_hdnn_reram = nullptr;
 extern "C" {
 void initialize_encoder(void* cfg_void) {
   config* cfg = (config*) cfg_void;
-  //fprintf(stderr, "initialize_encoder(%d, %d, %d)\n", cfg->num_features, cfg->hypervector_dim, cfg->num_classes);
-  if (ins_hdnn_reram == nullptr) {
-    ins_hdnn_reram = new sim_hdnn_reram(cfg->num_features, cfg->hypervector_dim,
+#ifdef TRACE
+  fprintf(stderr, "initialize_encoder(%d, %d, %d)\n", cfg->num_features, cfg->hypervector_dim, cfg->num_classes);
+#endif
+  delete ins_hdnn_reram;
+  ins_hdnn_reram = new sim_hdnn_reram(cfg->num_features, cfg->hypervector_dim,
                                         cfg->num_classes);
-  }
 }
 
 
 void initialize_device(void* cfg_void) {
   config* cfg = (config*) cfg_void;
-  //fprintf(stderr, "initialize_device(%d, %d, %d)\n", cfg->num_features, cfg->hypervector_dim, cfg->num_classes);
-  if (ins_hdnn_reram == nullptr) {
-    ins_hdnn_reram = new sim_hdnn_reram(cfg->num_features, cfg->hypervector_dim,
+#ifdef TRACE
+  fprintf(stderr, "initialize_device(%d, %d, %d)\n", cfg->num_features, cfg->hypervector_dim, cfg->num_classes);
+#endif
+  delete ins_hdnn_reram;
+  ins_hdnn_reram = new sim_hdnn_reram(cfg->num_features, cfg->hypervector_dim,
                                         cfg->num_classes);
-  }
 }
 
 void encode_hypervector(int16_t *dst_pointer, int16_t *input_features,
                         int input_dimension, int encoded_dimension) {
-  //fprintf(stderr, "encode_hypervector(%p, %p, %d, %d)\n", dst_pointer, input_features, input_dimension, encoded_dimension);
+#ifdef TRACE
+  fprintf(stderr, "encode_hypervector(%p, %p, %d, %d)\n", dst_pointer, input_features, input_dimension, encoded_dimension);
+#endif
   assert(input_dimension == ins_hdnn_reram->dim_feature);
   assert(encoded_dimension == ins_hdnn_reram->dim_hv);
 
@@ -39,7 +44,9 @@ void encode_hypervector(int16_t *dst_pointer, int16_t *input_features,
 
 void execute_encode(void* dst_pointer_void, void *input_features_void,
                         int input_dimension, int encoded_dimension) {
-  //fprintf(stderr, "execute_encode(%p, %p, %d, %d)\n", dst_pointer_void, input_features_void, input_dimension, encoded_dimension);
+#ifdef TRACE
+  fprintf(stderr, "execute_encode(%p, %p, %d, %d)\n", dst_pointer_void, input_features_void, input_dimension, encoded_dimension);
+#endif
   int16_t* dst_pointer = (int16_t*) dst_pointer_void; 
   int16_t* input_features = (int16_t*) input_features_void; 
 
@@ -50,38 +57,52 @@ void execute_encode(void* dst_pointer_void, void *input_features_void,
 }
 
 void hamming_distance(void *result, void *encoded_query) {
-  //fprintf(stderr, "hamming_distance(%p, %p)\n", result, encoded_query);
+#ifdef TRACE
+  fprintf(stderr, "hamming_distance(%p, %p)\n", result, encoded_query);
+#endif
   bool reram_comp = false;
   ins_hdnn_reram->hamming_distance((int16_t*) result,(int16_t*) encoded_query, reram_comp);
 }
 
 void allocate_base_mem(void *BasePtr, size_t NumBytes) {
-  //fprintf(stderr, "allocate_base_mem(%p, %lu)\n", BasePtr, NumBytes);
+#ifdef TRACE
+  fprintf(stderr, "allocate_base_mem(%p, %lu)\n", BasePtr, NumBytes);
+#endif
   // Do nothing: use internal base matrix for encoding
 }
 
 void allocate_feature_mem(void *FeatureMem, size_t NumBytes) {
-  //fprintf(stderr, "allocate_feature_mem(%p, %lu)\n", FeatureMem, NumBytes);
+#ifdef TRACE
+  fprintf(stderr, "allocate_feature_mem(%p, %lu)\n", FeatureMem, NumBytes);
+#endif
   ins_hdnn_reram->allocate_feature_mem((int16_t *)FeatureMem, NumBytes);
 }
 
 void allocate_class_mem(void *ClassMem, size_t NumBytes) {
-  //fprintf(stderr, "allocate_class_mem(%p, %lu)\n", ClassMem, NumBytes);
+#ifdef TRACE
+  fprintf(stderr, "allocate_class_mem(%p, %lu)\n", ClassMem, NumBytes);
+#endif
   ins_hdnn_reram->allocate_class_mem((int16_t *)ClassMem, NumBytes);
 }
 
 void read_class_mem(void *ClassMem, size_t NumBytes) {
-  //fprintf(stderr, "read_class_mem(%p, %lu)\n", ClassMem, NumBytes);
+#ifdef TRACE
+  fprintf(stderr, "read_class_mem(%p, %lu)\n", ClassMem, NumBytes);
+#endif
   ins_hdnn_reram->read_class_mem((int16_t *)ClassMem, NumBytes);
 }
 
 void read_score_mem(void *ScoreMem, size_t NumBytes) {
-  //fprintf(stderr, "read_score_mem(%p, %lu)\n", ScoreMem, NumBytes);
+#ifdef TRACE
+  fprintf(stderr, "read_score_mem(%p, %lu)\n", ScoreMem, NumBytes);
+#endif
   ins_hdnn_reram->read_score_mem((int16_t *)ScoreMem, NumBytes);
 }
 
 void execute_train(int label) {
-  //fprintf(stderr, "execute_train(%d)\n", label);
+#ifdef TRACE
+  fprintf(stderr, "execute_train(%d)\n", label);
+#endif
   uint32_t dim_hv = ins_hdnn_reram->dim_hv;
   uint32_t dim_feature = ins_hdnn_reram->dim_feature;
   uint32_t num_class = ins_hdnn_reram->num_class;
@@ -104,7 +125,9 @@ void execute_train(int label) {
 }
 
 int execute_inference() {
-  //fprintf(stderr, "execute_inference\n");
+#ifdef TRACE
+  fprintf(stderr, "execute_inference\n");
+#endif
   uint32_t dim_hv = ins_hdnn_reram->dim_hv;
   uint32_t dim_feature = ins_hdnn_reram->dim_feature;
   uint32_t num_class = ins_hdnn_reram->num_class;
@@ -126,7 +149,9 @@ int execute_inference() {
 }
 
 void execute_retrain(int label) {
-  //fprintf(stderr, "execute_retrain(%d)\n", label);
+#ifdef TRACE
+  fprintf(stderr, "execute_retrain(%d)\n", label);
+#endif
   uint32_t dim_hv = ins_hdnn_reram->dim_hv;
   uint32_t dim_feature = ins_hdnn_reram->dim_feature;
   uint32_t num_class = ins_hdnn_reram->num_class;
