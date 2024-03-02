@@ -212,7 +212,10 @@ int main(int argc, char** argv)
 	t_start = std::chrono::high_resolution_clock::now();
 
 	// Host allocated memory 
-	__hypervector__<Dhv, hvtype> encoded_hv = __hetero_hdc_hypervector<Dhv, hvtype>();
+	__hypervector__<Dhv, hvtype>* encoded_hv = new __hypervector__<Dhv, hvtype>[N_SAMPLE];
+	//for (int i = 0; i < N_SAMPLE; ++i) {
+	//	encoded_hv[i] = __hetero_hdc_hypervector<Dhv, hvtype>();
+	//}
 	hvtype* encoded_hv_buffer = new hvtype[Dhv];
 	size_t encoded_hv_size = Dhv * sizeof(hvtype);
 
@@ -317,9 +320,9 @@ int main(int argc, char** argv)
 			rp_matrix_buffer, rp_matrix_size, //false,
 			datapoint_hv_ptr, input_vector_size,
 			/* Output Buffers: 1*/ 
-			&encoded_hv, class_size,  //false,
+			&encoded_hv[i], class_size,  //false,
 			1,
-			&encoded_hv, class_size //false
+			&encoded_hv[i], class_size //false
 		);
 
 		__hetero_wait(initialize_DFG);
@@ -327,15 +330,15 @@ int main(int argc, char** argv)
                 InitialEncodingDFG<Dhv, N_FEAT>(
 		    (__hypermatrix__<Dhv, N_FEAT, hvtype> *) rp_matrix_buffer, rp_matrix_size,
 		    (__hypervector__<N_FEAT, hvtype> *) datapoint_hv_ptr, input_vector_size,
-		    &encoded_hv, class_size
+		    &encoded_hv[i], class_size
                 );
 #endif
+	}
 
+	for (int i = 0; i < N_SAMPLE; i++) {
 		int label = training_labels[i];
-
-        // TODO: Move this to DFG?
 		update_hv =  __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, label);
-		update_hv = __hetero_hdc_sum<Dhv, hvtype>(update_hv, encoded_hv); 
+		update_hv = __hetero_hdc_sum<Dhv, hvtype>(update_hv, encoded_hv[i]); 
 		__hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, update_hv, label); 
 	}
 
