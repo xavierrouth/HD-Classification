@@ -15,7 +15,7 @@ void initialize_encoder(void* cfg_void) {
 #ifdef TRACE
   fprintf(stderr, "initialize_encoder(%d, %d, %d)\n", cfg->num_features, cfg->hypervector_dim, cfg->num_classes);
 #endif
-  delete ins_hdnn_reram;
+  if (!ins_hdnn_reram)
   ins_hdnn_reram = new sim_hdnn_reram(cfg->num_features, cfg->hypervector_dim,
                                         cfg->num_classes);
 }
@@ -26,7 +26,7 @@ void initialize_device(void* cfg_void) {
 #ifdef TRACE
   fprintf(stderr, "initialize_device(%d, %d, %d)\n", cfg->num_features, cfg->hypervector_dim, cfg->num_classes);
 #endif
-  delete ins_hdnn_reram;
+  if (!ins_hdnn_reram)
   ins_hdnn_reram = new sim_hdnn_reram(cfg->num_features, cfg->hypervector_dim,
                                         cfg->num_classes);
 }

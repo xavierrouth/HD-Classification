@@ -11,6 +11,7 @@
 #include <cmath>
 #include <algorithm>
 #include <random>
+#include <cstring>
 
 #define OFFLOAD_RP_GEN 
 
@@ -186,6 +187,7 @@ int main(int argc, char** argv)
 
 	// INFERENCE DATA / TEST DATA
 	int inference_labels[N_TEST];
+	memset(inference_labels, 0xFF, sizeof(inference_labels));
 	size_t inference_labels_size = N_TEST * sizeof(int);
 
 #if 0 //hvtype == int
@@ -307,7 +309,7 @@ int main(int argc, char** argv)
 	// Initialize class hvs.
 	__hetero_hdc_encoding_loop(
 		0, (void*) InitialEncodingDFG<Dhv, N_FEAT>,
-		N_SAMPLE, N_FEAT, N_FEAT_PAD,
+		N_SAMPLE, N_FEAT, N_FEAT_PAD, N_CLASS,
 		rp_matrix_buffer, rp_matrix_size,
 		training_input_vectors, input_vector_size,
 		encoded_hv, class_size
@@ -351,11 +353,11 @@ int main(int argc, char** argv)
 		norms_buffer, norms_size
 	);
 
-	//std::ofstream myfile("out.txt");
+	std::ofstream myfile("out.txt");
 
 	int correct = 0;
 	for(int i = 0; i < N_TEST; i++) {
-		//myfile << y_test[i] << " " << inference_labels[i] << std::endl;
+		myfile << y_test[i] << " " << inference_labels[i] << std::endl;
 		if(inference_labels[i] == y_test[i])
 			correct += 1;
 	}
