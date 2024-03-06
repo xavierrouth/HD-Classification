@@ -13,6 +13,9 @@ OPENCL_LIB_PATH:=$(OPENCL_PATH/lib64)
 
 CFLAGS := -O1 -fenable-matrix -fno-discard-value-names -fno-exceptions -lm -lrt -pthread -lOpenCL
 
+HDC_LIBS := -load $(HPVM_LIB)/LLVMHPVMHDC.so -load $(HPVM_LIB)/LLVMHDCBinProp.so  -load $(HPVM_LIB)/LLVMBinarize.so  
+
+
 # PARAMETERS := -DHPVM -DDEVICE=hpvm::CPU_TARGET
 #
 #
@@ -34,7 +37,7 @@ build/hpvm.genhdc.sim.ll: build/host.sim.ll
 
 # Lower HDC Intrinsics
 build/hdc.lowered.sim.ll: build/hpvm.genhdc.sim.ll #hpvm. # -enable-hcc 
-	$(HPVM_BIN)/opt -enable-new-pm=0 -load $(HPVM_LIB)/LLVMHPVMHDC.so -vector-block-dim=1 -lower-hdc -compile-sim -dce -simplifycfg $< -S -o $@ 
+	$(HPVM_BIN)/opt -enable-new-pm=0 -load $(HPVM_LIB)/LLVMHPVMHDC.so  -vector-block-dim=1 -lower-hdc -compile-sim -dce -simplifycfg $< -S -o $@ 
 
 ### ---------- ACCEL ---------------
 
@@ -74,7 +77,7 @@ build/hpvm.genhdc.cpu.ll: build/host.cpu.ll
 
 # Lower HDC Intrinsics
 build/hdc.lowered.cpu.ll: build/hpvm.genhdc.cpu.ll #hpvm. # -enable-hcc 
-	$(HPVM_BIN)/opt -enable-new-pm=0 -load $(HPVM_LIB)/LLVMHPVMHDC.so -vector-block-dim=1 -lower-hdc    -dce -simplifycfg $< -S -o $@ 
+	$(HPVM_BIN)/opt -enable-new-pm=0 $(HDC_LIBS) -hdc-bin-prop -hdc-binarize -vector-block-dim=1 -lower-hdc    -dce -simplifycfg $< -S -o $@ 
 	
 # HCC -> HPVM
 build/hpvmc.cpu.ll: build/hdc.lowered.cpu.ll
