@@ -4,7 +4,7 @@
 #include <heterocc.h>
 #include <iostream>
 
-//#define HAMMING_DIST
+// #define HAMMING_DIST
 
 #undef D
 #undef N_FEATURES
@@ -329,25 +329,16 @@ void __attribute__ ((noinline)) classification_node_inference(
     __hypervector__<K, hvtype> scores = *scores_ptr;
     int max_idx = 0;
     
-    hvtype* scores_elem_ptr = (hvtype*) scores_ptr;
-    #ifdef HAMMING_DIST
-    hvtype max_score = (hvtype) D - scores_elem_ptr[0]; // I think this is probably causing issues.
-    #else
-    hvtype max_score = (hvtype) scores_elem_ptr[0];
-    #endif
 
-    
-    for (int k = 0; k < K; k++) {
-        #ifdef HAMMING_DIST
-        hvtype score = (hvtype) D - scores_elem_ptr[k];
-        #else
-        hvtype score = (hvtype) scores_elem_ptr[k];
-        #endif
-        if (score > max_score) {
-            max_score = score;
-            max_idx = k;
-        }
-    } 
+#ifdef HAMMING_DIST
+    // For hamming distance take the smallest value
+    max_idx = __hetero_hdc_arg_min<K, hvtype>(*scores_ptr);
+
+#else
+
+    max_idx = __hetero_hdc_arg_max<K, hvtype>(*scores_ptr);
+
+#endif
     
     // Set the label to our guess 
     *label_ptr = max_idx; 
@@ -425,25 +416,15 @@ void classification_node_training_rest(/* Input Buffers: 2 */
         __hypervector__<K, hvtype> scores = *scores_ptr;
 
         *argmax = 0;
-        
-        hvtype* scores_elem_ptr = (hvtype*) scores_ptr;
-        #ifdef HAMMING_DIST
-        hvtype max_score = (hvtype) D - scores_elem_ptr[0]; // I think this is probably causing issues.
-        #else
-        hvtype max_score = (hvtype) scores_elem_ptr[0];
-        #endif
-        
-        for (int k = 0; k < K; k++) {
-            #ifdef HAMMING_DIST
-            hvtype score = (hvtype) D - scores_elem_ptr[k];
-            #else
-            hvtype score = (hvtype) scores_elem_ptr[k];
-            #endif
-            if (score > max_score) {
-                max_score = score;
-                *argmax = k;
-            }
-        } 
+
+#ifdef HAMMING_DIST
+        // For hamming distance take the smallest value
+        *argmax = __hetero_hdc_arg_min<K, hvtype>(*scores_ptr);
+
+#else
+        *argmax = __hetero_hdc_arg_max<K, hvtype>(*scores_ptr);
+#endif
+
     }
 #ifndef NODFG
     __hetero_task_end(task2);
@@ -471,15 +452,6 @@ void classification_node_training_rest(/* Input Buffers: 2 */
         *update_hv_ptr = __hetero_hdc_sub<D, hvtype>(max_idx_row, *encoded_hv_ptr); // May need an instrinsic for this.
         __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, max_idx); // How do we normalize?
 
-        /*
-        *update_hv_ptr =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, label);
-        *update_hv_ptr = __hetero_hdc_sum<D, hvtype>(*update_hv_ptr, *encoded_hv_ptr); // May need an instrinsic for this.
-        __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, label); // How do we normalize?
-
-        *update_hv_ptr =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, max_idx);
-        *update_hv_ptr = __hetero_hdc_sub<D, hvtype>(*update_hv_ptr, *encoded_hv_ptr); // May need an instrinsic for this.
-        __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, max_idx); // How do we normalize?
-        */
     }
 #ifndef NODFG
     __hetero_task_end(task3);
