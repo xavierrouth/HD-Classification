@@ -139,7 +139,6 @@ void InitialEncodingDFG(
 
     void* task = __hetero_task_begin(
         /* Input Buffers: 2*/ 3, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size,
-        /* Parameters: 0*/
         /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size,
         "initial_encoding_wrapper"
     );
@@ -280,7 +279,6 @@ void __attribute__ ((noinline)) classification_node_inference(
     __hypermatrix__<K, D, hvtype>* classes_ptr, size_t classes_size, // __hypermatrix__<K, D, binary>
     __hypervector__<K, hvtype>* scores_ptr, size_t scores_size, // Used as Local var.
     __hypervector__<K, hvtype>* norms_ptr, size_t norms_size, // Used as Local var.
-    int encoded_hv_idx,
     int* label_ptr, size_t label_size ) {   
     // Read classes hvs from host.
 
@@ -320,8 +318,7 @@ void __attribute__ ((noinline)) classification_node_inference(
     __hetero_task_end(task1);
 
     void* task2 = __hetero_task_begin(
-        /* Input Buffers: 1*/ 4, scores_ptr, scores_size, label_ptr, label_size, encoded_hv_ptr, encoded_hv_size,
-        /* paramters: 1*/       encoded_hv_idx,
+        /* Input Buffers: 1*/ 3, scores_ptr, scores_size, label_ptr, label_size, encoded_hv_ptr, encoded_hv_size,
         /* Output Buffers: 1*/ 1,  label_ptr, label_size, "inference_find_max_task"
     );  
 
@@ -621,10 +618,8 @@ void encoding_and_inference_node( /* Input buffers: 3*/
                 /* Local Vars: 2*/
                 __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, // // __hypervector__<D, binary>
                 __hypervector__<K, hvtype>* scores_ptr, size_t scores_size,
-                __hypervector__<K, hvtype>* norms_ptr, size_t norms_size,
+                __hypervector__<K, hvtype>* norms_ptr, size_t norms_size
                 // FIXME, give scores its own type.
-                /* Parameters: 1*/
-                int encoded_hv_idx
                 /* Output Buffers: 1*/
                 ){
 
@@ -645,19 +640,18 @@ void encoding_and_inference_node( /* Input buffers: 3*/
     __hetero_task_end(encoding_task);
 
     void* inference_task = __hetero_task_begin(
-        /* Input Buffers: 5 */  5 + 1, 
+        /* Input Buffers: 5 */  5, 
                                 encoded_hv_ptr, encoded_hv_size, 
                                 classes_ptr, classes_size, 
                                 label_ptr, label_size,
                                 scores_ptr, scores_size,
                                 norms_ptr, norms_size,
-        /* Parameters: 1 */     encoded_hv_idx,
         /* Output Buffers: 1 */ 1, label_ptr, label_size,
         "inference_task"  
     );
 #endif
 
-    classification_node_inference<D, K, N_VEC>(encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size, scores_ptr, scores_size,norms_ptr, norms_size , encoded_hv_idx, label_ptr, label_size); 
+    classification_node_inference<D, K, N_VEC>(encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size, scores_ptr, scores_size,norms_ptr, norms_size , label_ptr, label_size); 
 
 #ifndef NODFG
     __hetero_task_end(inference_task);
@@ -678,9 +672,7 @@ void inference_root_node( /* Input buffers: 3*/
                 /* Local Vars: 2*/
                 __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, // // __hypervector__<D, binary>
                 __hypervector__<K, hvtype>* scores_ptr, size_t scores_size,
-                __hypervector__<K, hvtype>* norms_ptr, size_t norms_size,
-                /* Parameters: 1*/
-                int encoded_hv_idx
+                __hypervector__<K, hvtype>* norms_ptr, size_t norms_size
 ){
 
 #ifndef NODFG
@@ -688,7 +680,7 @@ void inference_root_node( /* Input buffers: 3*/
 
     // Re-encode each iteration.
     void* inference_task = __hetero_task_begin(
-            /* Input Buffers: 3 */ 8, 
+            /* Input Buffers: 3 */ 7, 
             rp_matrix_ptr, rp_matrix_size, 
             datapoint_vec_ptr, datapoint_vec_size, 
             encoded_hv_ptr, encoded_hv_size,
@@ -696,14 +688,13 @@ void inference_root_node( /* Input buffers: 3*/
             label_ptr, label_size,
             scores_ptr, scores_size,
             norms_ptr, norms_size,
-            encoded_hv_idx,
             /* Output Buffers: 1 */ 1,encoded_hv_ptr, encoded_hv_size,
             "inference_task"
             );
 #endif
 
     __hetero_hdc_inference(
-        15,
+        14,
         (void*) encoding_and_inference_node<D, K, N_VEC, N_FEATURES>,
         rp_matrix_ptr, rp_matrix_size, 
         datapoint_vec_ptr, datapoint_vec_size, 
@@ -711,8 +702,7 @@ void inference_root_node( /* Input buffers: 3*/
         label_ptr, label_size,
         encoded_hv_ptr, encoded_hv_size, //Extra Arguments
         scores_ptr, scores_size,
-        norms_ptr, norms_size,
-        encoded_hv_idx
+        norms_ptr, norms_size
     );
 
 
