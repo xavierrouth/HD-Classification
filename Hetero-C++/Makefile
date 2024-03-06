@@ -75,9 +75,13 @@ build/hpvm.genhdc.cpu.ll: build/host.cpu.ll
 	$(HPVM_BIN)/opt -mem2reg -enable-new-pm=0 -load $(HPVM_LIB)/HPVMGenHPVM.so -genhpvm -hpvm-hdc-only $< -S -o $@
 # $OPT -mem2reg -enable-new-pm=0 -load $HPVM_LIB/HPVMGenHPVM.so -genhpvm  -hpvm-hdc-only $PREFIX.ll -S -o $PREFIX.genhdc.hpvm.ll
 
+# Binarize HDC Intrinsics
+build/hdc.binarized.cpu.ll: build/hpvm.genhdc.cpu.ll #hpvm. # -enable-hcc 
+	$(HPVM_BIN)/opt -enable-new-pm=0 $(HDC_LIBS) -hdc-bin-prop -hdc-binarize  $< -S -o $@ 
+
 # Lower HDC Intrinsics
-build/hdc.lowered.cpu.ll: build/hpvm.genhdc.cpu.ll #hpvm. # -enable-hcc 
-	$(HPVM_BIN)/opt -enable-new-pm=0 $(HDC_LIBS) -hdc-bin-prop -hdc-binarize -vector-block-dim=1 -lower-hdc    -dce -simplifycfg $< -S -o $@ 
+build/hdc.lowered.cpu.ll: build/hdc.binarized.cpu.ll #hpvm. # -enable-hcc 
+	$(HPVM_BIN)/opt -enable-new-pm=0 $(HDC_LIBS)  -vector-block-dim=1 -lower-hdc    -dce -simplifycfg $< -S -o $@ 
 	
 # HCC -> HPVM
 build/hpvmc.cpu.ll: build/hdc.lowered.cpu.ll
