@@ -332,7 +332,7 @@ int main(int argc, char** argv)
 		rp_matrix_buffer, rp_matrix_size,
 		training_input_vectors, input_vector_size,
 		&classes, classes_size,
-		training_labels,
+		training_labels, training_labels_size,
 		encoded_hv_buffer, encoded_hv_size,
 		scores_buffer, scores_size,
 		norms_buffer, norms_size,
