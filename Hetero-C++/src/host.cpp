@@ -309,7 +309,7 @@ int main(int argc, char** argv)
 	// Initialize class hvs.
 	__hetero_hdc_encoding_loop(
 		0, (void*) InitialEncodingDFG<Dhv, N_FEAT>,
-		N_SAMPLE, N_FEAT, N_FEAT_PAD, N_CLASS,
+		N_CLASS, N_FEAT, N_FEAT_PAD,
 		rp_matrix_buffer, rp_matrix_size,
 		training_input_vectors, input_vector_size,
 		encoded_hv, class_size
