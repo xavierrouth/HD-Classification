@@ -1,5 +1,8 @@
 #define HPVM 1
 
+
+#define BINARIZE
+
 #ifdef HPVM
 #include <heterocc.h>
 #include <hpvm_hdc.h>
@@ -23,6 +26,7 @@
 
 template <int N, typename elemTy>
 void print_hv(__hypervector__<N, elemTy> hv) {
+    printf("Print hypervector invoked!\n");
     int num_neg_one = 0;
     int num_one = 0;
     std::cout << "[";
@@ -189,7 +193,7 @@ int main(int argc, char** argv)
 
 	// INFERENCE DATA / TEST DATA
 	int inference_labels[N_TEST];
-	//memset(inference_labels, 0xFF, sizeof(inference_labels));
+	memset(inference_labels, 0xFF, sizeof(inference_labels));
 	size_t inference_labels_size = N_TEST * sizeof(int);
 
 #if 0 //hvtype == int
@@ -320,7 +324,7 @@ int main(int argc, char** argv)
 	// Initialize class hvs.
 	__hetero_hdc_encoding_loop(
 		0, (void*) InitialEncodingDFG<Dhv, N_FEAT>,
-		N_SAMPLE, N_FEAT, N_FEAT_PAD, N_CLASS,
+        N_CLASS, N_FEAT, N_FEAT_PAD,
 		rp_matrix_buffer, rp_matrix_size,
 		training_input_vectors, input_vector_size,
 		encoded_hv, class_size
@@ -334,13 +338,9 @@ int main(int argc, char** argv)
 	}
 
     
-    // Binarize the class hypermatrix pre-training
-	__hypermatrix__<N_CLASS, Dhv, hvtype> binarized_classes = __hetero_hdc_sign<N_CLASS, Dhv, hvtype>(classes);
-	size_t binarized_classes_size = N_CLASS * Dhv * sizeof(hvtype);
 
 
 
-#if 0 
 	int argmax[1];
 	// Training generates classes from labeled data. 
 	// ======= Training Rest Epochs ======= 
@@ -350,7 +350,7 @@ int main(int argc, char** argv)
 		EPOCH, N_SAMPLE, N_FEAT, N_FEAT_PAD,
 		rp_matrix_buffer, rp_matrix_size,
 		training_input_vectors, input_vector_size,
-		&binarized_classes, binarized_classes_size,
+		&classes, classes_size,
 		training_labels,
 		encoded_hv_buffer, encoded_hv_size,
 		scores_buffer, scores_size,
@@ -359,8 +359,33 @@ int main(int argc, char** argv)
 		&argmax[0], sizeof(int)
 	);
 
+    // Binarize the class hypermatrix pre-training
+#ifdef BINARIZE
+    printf("Binarize classes before inference\n");
+	__hypermatrix__<N_CLASS, Dhv, hvtype> binarized_classes = __hetero_hdc_sign<N_CLASS, Dhv, hvtype>(classes);
+#else
+    printf("Do not Binarize classes before inference\n");
+	__hypermatrix__<N_CLASS, Dhv, hvtype> binarized_classes = classes;
 #endif
+	size_t binarized_classes_size = N_CLASS * Dhv * sizeof(hvtype);
 
+
+	hvtype* inference_encoded_hv_buffer = new hvtype[Dhv];
+	size_t inference_encoded_hv_size = Dhv * sizeof(hvtype);
+
+
+#if 0 
+	for (int i = 0; i < 3; i++) {
+        printf("Printing HM %d\n", i);
+		update_hv =  __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(binarized_classes, N_CLASS, Dhv, i);
+        hvtype* base = (hvtype*)&update_hv;
+
+        for(int k =0; k < 100; k++){
+            std::cout << base[k] << " ";
+        }
+        std::cout << "\n";
+	}
+#endif
 	// ============ Inference =============== //
     printf("Starting inference!\n");
 
@@ -372,7 +397,7 @@ int main(int argc, char** argv)
 		/* 2 */inference_input_vectors, /* 3 */input_vector_size,
 		/* 4 */&binarized_classes, /* 5 */binarized_classes_size,
 		/* 6 */inference_labels, /* Added 7*/ inference_labels_size,
-		/* 8 */encoded_hv_buffer, /* 9 */encoded_hv_size,
+		/* 8 */inference_encoded_hv_buffer, /* 9 */inference_encoded_hv_size,
 		/* 10 */scores_buffer, /* 11 */scores_size,
 		/* 12 */norms_buffer, /* 13 */norms_size
 	);
