@@ -561,7 +561,7 @@ void training_root_node( /* Input buffers: 3*/
             argmax_ptr, argmax_size,
             label, 
         /* Output Buffers: 1 */ 1, 
-        encoded_hv_ptr, encoded_hv_size,
+            classes_ptr, classes_size, 
         "root_task"  
     );
 #endif
