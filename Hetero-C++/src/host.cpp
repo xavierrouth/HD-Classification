@@ -347,7 +347,7 @@ int main(int argc, char** argv)
 		rp_matrix_buffer, rp_matrix_size,
 		inference_input_vectors, input_vector_size,
 		&classes, classes_size,
-		inference_labels,
+		inference_labels, inference_labels_size,
 		encoded_hv_buffer, encoded_hv_size,
 		scores_buffer, scores_size,
 		norms_buffer, norms_size
