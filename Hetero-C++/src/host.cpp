@@ -119,6 +119,8 @@ int main(int argc, char** argv)
 	srand(time(NULL));
 
 	int EPOCH = std::atoi(argv[1]);
+
+
    
 #ifdef QUANT
 
@@ -187,7 +189,7 @@ int main(int argc, char** argv)
 
 	// INFERENCE DATA / TEST DATA
 	int inference_labels[N_TEST];
-	memset(inference_labels, 0xFF, sizeof(inference_labels));
+	//memset(inference_labels, 0xFF, sizeof(inference_labels));
 	size_t inference_labels_size = N_TEST * sizeof(int);
 
 #if 0 //hvtype == int
@@ -195,7 +197,15 @@ int main(int argc, char** argv)
 #else
 	// TRAINING DATA INITIALZIATION
 	std::vector<hvtype> temp_vec2(X_test.begin(), X_test.end());
+    //hvtype* inference_input_vectors = new hvtype[temp_vec2.size()];
 	hvtype* inference_input_vectors = temp_vec2.data();
+    /*
+    hvtype* inference_input_vectors = new hvtype[temp_vec2.size()];
+
+    for(int i =0; i < temp_vec2.size(); i++){
+        inference_input_vectors[i] = (hvtype) temp_vec2[i];
+    }
+    */
     assert((temp_vec2.size() / N_FEAT_PAD) == N_TEST && "Incorrect number of tests");
 #endif
 
@@ -305,6 +315,7 @@ int main(int argc, char** argv)
 
 
 	// ============ Training ===============
+    //
 
 	// Initialize class hvs.
 	__hetero_hdc_encoding_loop(
@@ -322,6 +333,14 @@ int main(int argc, char** argv)
 		__hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, update_hv, label); 
 	}
 
+    
+    // Binarize the class hypermatrix pre-training
+	__hypermatrix__<N_CLASS, Dhv, hvtype> binarized_classes = __hetero_hdc_sign<N_CLASS, Dhv, hvtype>(classes);
+	size_t binarized_classes_size = N_CLASS * Dhv * sizeof(hvtype);
+
+
+
+#if 0 
 	int argmax[1];
 	// Training generates classes from labeled data. 
 	// ======= Training Rest Epochs ======= 
@@ -331,7 +350,7 @@ int main(int argc, char** argv)
 		EPOCH, N_SAMPLE, N_FEAT, N_FEAT_PAD,
 		rp_matrix_buffer, rp_matrix_size,
 		training_input_vectors, input_vector_size,
-		&classes, classes_size,
+		&binarized_classes, binarized_classes_size,
 		training_labels,
 		encoded_hv_buffer, encoded_hv_size,
 		scores_buffer, scores_size,
@@ -340,19 +359,26 @@ int main(int argc, char** argv)
 		&argmax[0], sizeof(int)
 	);
 
+#endif
+
 	// ============ Inference =============== //
+    printf("Starting inference!\n");
 
 	__hetero_hdc_inference_loop(17, (void*) inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>,
 		N_TEST, N_FEAT, N_FEAT_PAD,
-		rp_matrix_buffer, rp_matrix_size,
-		inference_input_vectors, input_vector_size,
-		&classes, classes_size,
-		inference_labels,
-		encoded_hv_buffer, encoded_hv_size,
-		scores_buffer, scores_size,
-		norms_buffer, norms_size
+
+
+		/* 0 */ rp_matrix_buffer, /* 1 */ rp_matrix_size,
+		/* 2 */inference_input_vectors, /* 3 */input_vector_size,
+		/* 4 */&binarized_classes, /* 5 */binarized_classes_size,
+		/* 6 */inference_labels, /* Added 7*/ inference_labels_size,
+		/* 8 */encoded_hv_buffer, /* 9 */encoded_hv_size,
+		/* 10 */scores_buffer, /* 11 */scores_size,
+		/* 12 */norms_buffer, /* 13 */norms_size
 	);
 
+
+    printf("Finished inference!\n");
 	std::ofstream myfile("out.txt");
 
 	int correct = 0;

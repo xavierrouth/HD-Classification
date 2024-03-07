@@ -4,7 +4,7 @@
 #include <heterocc.h>
 #include <iostream>
 
-// #define HAMMING_DIST
+#define HAMMING_DIST
 
 #undef D
 #undef N_FEATURES
@@ -233,7 +233,7 @@ void gen_rp_matrix(/* Input Buffers*/
 
 
 template<int D, int N_FEATURES>
-void rp_encoding_node_copy_copy(/* Input Buffers: 2*/
+void __attribute__ ((noinline)) rp_encoding_node_copy_copy(/* Input Buffers: 2*/
         __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, // __hypermatrix__<N_FEATURES, D, binary>
         __hypervector__<N_FEATURES, hvtype>* input_datapoint_ptr, size_t input_datapoint_size, // __hypervector__<N_FEATURES, int> 
         /* Output Buffers: 1*/
