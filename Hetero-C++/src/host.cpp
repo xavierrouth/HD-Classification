@@ -333,10 +333,11 @@ float run_hd_classification(
 	__hypervector__<Dhv, hvtype> update_hv = __hetero_hdc_hypervector<Dhv, hvtype>();
 	__hypermatrix__<N_CLASS, Dhv, hvtype> classes = __hetero_hdc_create_hypermatrix<N_CLASS, Dhv, hvtype>(0, (void*) zero_hv<hvtype>);
 
-	__hypervector__<Dhv, hvtype>* encoded_hv = new __hypervector__<Dhv, hvtype>[N_SAMPLE];
-	hvtype* encoded_hv_buffer = new hvtype[Dhv];
-	hvtype* scores_buffer = new hvtype[N_CLASS];
-	hvtype* norms_buffer = new hvtype[N_CLASS];
+	// Static since this is too large for the stack.
+	static __hypervector__<Dhv, hvtype> encoded_hv[N_SAMPLE];
+	hvtype encoded_hv_buffer[Dhv];
+	hvtype scores_buffer[N_CLASS];
+	hvtype norms_buffer[N_CLASS];
 
 	int inference_labels[N_TEST];
 	memset(inference_labels, 0xFF, sizeof(inference_labels));
