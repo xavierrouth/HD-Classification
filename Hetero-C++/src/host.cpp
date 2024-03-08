@@ -106,6 +106,14 @@ T initialize_rp_seed(size_t loop_index_var) {
 	}
 }
 
+float run_hd_classification(
+	int EPOCH,
+	hvtype* rp_matrix_buffer,
+	hvtype* training_input_vectors,
+	hvtype* inference_input_vectors,
+	int* training_labels,
+	int* y_test
+);
 
 int main(int argc, char** argv)
 {
@@ -213,34 +221,8 @@ int main(int argc, char** argv)
 
 	t_start = std::chrono::high_resolution_clock::now();
 
-	// Host allocated memory 
-	__hypervector__<Dhv, hvtype>* encoded_hv = new __hypervector__<Dhv, hvtype>[N_SAMPLE];
-	//for (int i = 0; i < N_SAMPLE; ++i) {
-	//	encoded_hv[i] = __hetero_hdc_hypervector<Dhv, hvtype>();
-	//}
-	hvtype* encoded_hv_buffer = new hvtype[Dhv];
-	size_t encoded_hv_size = Dhv * sizeof(hvtype);
-
-	__hypervector__<Dhv, hvtype> update_hv = __hetero_hdc_hypervector<Dhv, hvtype>();
-	//hvtype* update_hv_ptr = new hvtype[Dhv];
-	size_t update_hv_size = Dhv * sizeof(hvtype);
-	
-	size_t class_size = Dhv * sizeof(hvtype);
-
-	// Read from during classification
-	__hypermatrix__<N_CLASS, Dhv, hvtype> classes = __hetero_hdc_create_hypermatrix<N_CLASS, Dhv, hvtype>(0, (void*) zero_hv<hvtype>);
-	size_t classes_size = N_CLASS * Dhv * sizeof(hvtype);
-
-	// Temporarily store scores, allows us to split score calcuation into a separte task.
-	hvtype* scores_buffer = new hvtype[N_CLASS];
-	size_t scores_size = N_CLASS * sizeof(hvtype);
-
-	hvtype* norms_buffer = new hvtype[N_CLASS];
-	size_t norms_size = N_CLASS * sizeof(hvtype);
-
 	// Encoding matrix: First we write into rp_matrix_transpose, then transpose it to get rp_matrix,
 	// which is the correct dimensions for encoding input features.
-
 
 	size_t rp_matrix_size = N_FEAT * Dhv * sizeof(hvtype);
 
@@ -304,6 +286,61 @@ int main(int argc, char** argv)
 #endif
 
 
+	float test_accuracy = run_hd_classification(
+		EPOCH,
+		rp_matrix_buffer,
+		training_input_vectors,
+		inference_input_vectors,
+		training_labels,
+		y_test.data()
+	);
+
+
+    
+	t_elapsed = std::chrono::high_resolution_clock::now() - t_start;
+	
+	mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_elapsed).count();
+
+	std::cout << "Overall Benchmark took " << mSec << " mSec" << std::endl;
+
+	std::cout << "Test accuracy = " << test_accuracy << std::endl;
+
+#ifndef NODFG
+	__hpvm__cleanup();
+#endif	
+	return 0;
+}
+
+float run_hd_classification(
+	int EPOCH,
+	hvtype* rp_matrix_buffer,
+	hvtype* training_input_vectors,
+	hvtype* inference_input_vectors,
+	int* training_labels,
+	int* y_test
+) {
+	size_t rp_matrix_size = N_FEAT * Dhv * sizeof(hvtype);
+	size_t input_vector_size = N_FEAT * sizeof(hvtype);
+	size_t class_size = Dhv * sizeof(hvtype);
+	size_t classes_size = N_CLASS * Dhv * sizeof(hvtype);
+	size_t training_labels_size = N_SAMPLE * sizeof(int);
+	size_t inference_labels_size = N_TEST * sizeof(int);
+	size_t encoded_hv_size = Dhv * sizeof(hvtype);
+	size_t update_hv_size = Dhv * sizeof(hvtype);
+	size_t scores_size = N_CLASS * sizeof(hvtype);
+	size_t norms_size = N_CLASS * sizeof(hvtype);
+
+	__hypervector__<Dhv, hvtype> update_hv = __hetero_hdc_hypervector<Dhv, hvtype>();
+	__hypermatrix__<N_CLASS, Dhv, hvtype> classes = __hetero_hdc_create_hypermatrix<N_CLASS, Dhv, hvtype>(0, (void*) zero_hv<hvtype>);
+
+	__hypervector__<Dhv, hvtype>* encoded_hv = new __hypervector__<Dhv, hvtype>[N_SAMPLE];
+	hvtype* encoded_hv_buffer = new hvtype[Dhv];
+	hvtype* scores_buffer = new hvtype[N_CLASS];
+	hvtype* norms_buffer = new hvtype[N_CLASS];
+
+	int inference_labels[N_TEST];
+	memset(inference_labels, 0xFF, sizeof(inference_labels));
+
 	// ============ Training ===============
 
 	// Initialize class hvs.
@@ -353,27 +390,14 @@ int main(int argc, char** argv)
 		norms_buffer, norms_size
 	);
 
-	std::ofstream myfile("out.txt");
+	//std::ofstream myfile("out.txt");
 
 	int correct = 0;
 	for(int i = 0; i < N_TEST; i++) {
-		myfile << y_test[i] << " " << inference_labels[i] << std::endl;
+		//myfile << y_test[i] << " " << inference_labels[i] << std::endl;
 		if(inference_labels[i] == y_test[i])
 			correct += 1;
 	}
 
-	float test_accuracy = float(correct)/N_TEST;
-    
-	t_elapsed = std::chrono::high_resolution_clock::now() - t_start;
-	
-	mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_elapsed).count();
-
-	std::cout << "Overall Benchmark took " << mSec << " mSec" << std::endl;
-
-	std::cout << "Test accuracy = " << test_accuracy << std::endl;
-
-#ifndef NODFG
-	__hpvm__cleanup();
-#endif	
-	return 0;
+	return float(correct)/N_TEST;
 }
