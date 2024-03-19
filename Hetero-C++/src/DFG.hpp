@@ -259,6 +259,7 @@ void rp_encoding_node_copy_copy(/* Input Buffers: 2*/
     */
 
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
+    __hetero_hdc_sim_approx(encoded_hv, 0, N_FEATURES, 2);
     *output_hv_ptr = encoded_hv;
 
 #ifndef NODFG
@@ -309,8 +310,7 @@ void __attribute__ ((noinline)) classification_node_inference(
     //*scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
     //*scores_ptr = __hetero_hdc_absolute_value<K, hvtype>(*scores_ptr);
     __hypervector__<K, hvtype> score =  __hetero_hdc_cossim<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
-    // UNCOMMENT for an approximated cosine similarity
-    //__hetero_hdc_sim_approx(score, 0, D / 4, 4);
+    __hetero_hdc_sim_approx(score, 0, D / 4, 4);
     *scores_ptr = score;
 #endif
     #endif
