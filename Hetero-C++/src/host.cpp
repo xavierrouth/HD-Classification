@@ -345,29 +345,33 @@ int main(int argc, char** argv)
 	// Training generates classes from labeled data. 
 	// ======= Training Rest Epochs ======= 
 
+#if 1
 	__hetero_hdc_training_loop(
 		22, (void*) training_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>,
 		EPOCH, N_SAMPLE, N_FEAT, N_FEAT_PAD,
 		rp_matrix_buffer, rp_matrix_size,
 		training_input_vectors, input_vector_size,
 		&classes, classes_size,
-		training_labels,
+		training_labels,  training_labels_size,
 		encoded_hv_buffer, encoded_hv_size,
 		scores_buffer, scores_size,
 		norms_buffer, norms_size,
 		&update_hv, update_hv_size,
 		&argmax[0], sizeof(int)
 	);
+#endif
+
 
     // Binarize the class hypermatrix pre-training
 #ifdef BINARIZE
     printf("Binarize classes before inference\n");
 	__hypermatrix__<N_CLASS, Dhv, hvtype> binarized_classes = __hetero_hdc_sign<N_CLASS, Dhv, hvtype>(classes);
+	size_t binarized_classes_size = N_CLASS * Dhv * sizeof(int8_t);
 #else
     printf("Do not Binarize classes before inference\n");
 	__hypermatrix__<N_CLASS, Dhv, hvtype> binarized_classes = classes;
-#endif
 	size_t binarized_classes_size = N_CLASS * Dhv * sizeof(hvtype);
+#endif
 
 
 	hvtype* inference_encoded_hv_buffer = new hvtype[Dhv];
@@ -389,6 +393,7 @@ int main(int argc, char** argv)
 	// ============ Inference =============== //
     printf("Starting inference!\n");
 
+    auto inference_start = std::chrono::high_resolution_clock::now();
 	__hetero_hdc_inference_loop(17, (void*) inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>,
 		N_TEST, N_FEAT, N_FEAT_PAD,
 
@@ -401,6 +406,11 @@ int main(int argc, char** argv)
 		/* 10 */scores_buffer, /* 11 */scores_size,
 		/* 12 */norms_buffer, /* 13 */norms_size
 	);
+    auto inference_end = std::chrono::high_resolution_clock::now();
+    auto inference_time = inference_end - inference_start;
+
+    long inferenceMSec = std::chrono::duration_cast<std::chrono::milliseconds>(inference_time).count();
+    std::cout << "Inference took "<< inferenceMSec << " milliseconds " << std::endl;
 
 
     printf("Finished inference!\n");

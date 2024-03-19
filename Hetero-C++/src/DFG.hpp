@@ -6,7 +6,7 @@
 
 #define INFER_HAMMING
 
-#define TRAIN_HAMMING
+// #define TRAIN_HAMMING
 
 #undef D
 #undef N_FEATURES
@@ -17,6 +17,7 @@ typedef float hvtype;
 #else
 typedef int16_t hvtype;
 #endif
+
 
 
 
@@ -248,7 +249,7 @@ void __attribute__ ((noinline)) rp_encoding_node_copy_copy(/* Input Buffers: 2*/
         /* Input Buffers: 2*/ 3, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size,
         /* Parameters: 0*/
         /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size,
-        "inner_rp_encoding_task"
+        "inner_rp_encoding_task_copy"
     );
 
     __hetero_hint(DEVICE);
@@ -259,6 +260,7 @@ void __attribute__ ((noinline)) rp_encoding_node_copy_copy(/* Input Buffers: 2*/
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
     *output_hv_ptr = encoded_hv;
     */
+
 
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
     *output_hv_ptr = encoded_hv;
@@ -291,6 +293,7 @@ void __attribute__ ((noinline)) classification_node_inference(
         /* Input Buffers: */ 4, encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size, scores_ptr, scores_size, norms_ptr, norms_size, 
         /* Output Buffers: */ 1, scores_ptr, scores_size, "inference_calculate_score_task"
     );
+    
 
     __hetero_hint(DEVICE);
 #endif
@@ -307,14 +310,10 @@ void __attribute__ ((noinline)) classification_node_inference(
     //__hetero_hdc_sim_approx(score, 0, D, 1);
     #else
 #ifndef ACCEL
-    // TEMP
-    __hypervector__<K, hvtype> score =  __hetero_hdc_cossim<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
-    *scores_ptr = score;
-
-    //*norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
-    //*scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
-    //*scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
-    //*scores_ptr = __hetero_hdc_absolute_value<K, hvtype>(*scores_ptr);
+    *norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
+    *scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
+    *scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
+    *scores_ptr = __hetero_hdc_absolute_value<K, hvtype>(*scores_ptr);
 #endif
     #endif
 
@@ -397,6 +396,7 @@ void classification_node_training_rest(/* Input Buffers: 2 */
     #else
 
 #ifndef ACCEL
+
     *norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
     *scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
     *scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
@@ -633,6 +633,7 @@ void encoding_and_inference_node( /* Input buffers: 3*/
 
 #ifndef NODFG
     __hetero_task_end(inference_task);
+
 
     __hetero_section_end(root_section);
 #endif
