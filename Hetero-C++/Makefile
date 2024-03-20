@@ -15,6 +15,13 @@ CFLAGS := -O1 -fenable-matrix -fno-discard-value-names -fno-exceptions -lm -lrt 
 
 HDC_LIBS := -load $(HPVM_LIB)/LLVMHPVMHDC.so -load $(HPVM_LIB)/LLVMHDCBinProp.so  -load $(HPVM_LIB)/LLVMBinarize.so  
 
+LOWER_HDC_FLAGS_CPU := -vector-block-dim=1 -lower-hdc  
+BINARIZE_FLAGS_CPU := #-hdc-bin-prop -hdc-binarize
+
+
+LOWER_HDC_FLAGS_GPU := $(LOWER_HDC_FLAGS_CPU)  -enable-hcc
+BINARIZE_FLAGS_GPU := -hdc-bin-prop -hdc-binarize
+
 
 # PARAMETERS := -DHPVM -DDEVICE=hpvm::CPU_TARGET
 #
@@ -77,11 +84,11 @@ build/hpvm.genhdc.cpu.ll: build/host.cpu.ll
 
 # Binarize HDC Intrinsics
 build/hdc.binarized.cpu.ll: build/hpvm.genhdc.cpu.ll #hpvm. # -enable-hcc 
-	$(HPVM_BIN)/opt -enable-new-pm=0 $(HDC_LIBS) -hdc-bin-prop -hdc-binarize  $< -S -o $@ 
+	$(HPVM_BIN)/opt -enable-new-pm=0 $(HDC_LIBS) $(BINARIZE_FLAGS_CPU)   $< -S -o $@ 
 
 # Lower HDC Intrinsics
 build/hdc.lowered.cpu.ll: build/hdc.binarized.cpu.ll #hpvm. # -enable-hcc 
-	$(HPVM_BIN)/opt -enable-new-pm=0 $(HDC_LIBS)  -vector-block-dim=1 -lower-hdc    -dce -simplifycfg $< -S -o $@ 
+	$(HPVM_BIN)/opt -enable-new-pm=0 $(HDC_LIBS) $(LOWER_HDC_FLAGS_CPU)     -dce -simplifycfg $< -S -o $@ 
 	
 # HCC -> HPVM
 build/hpvmc.cpu.ll: build/hdc.lowered.cpu.ll
@@ -119,9 +126,15 @@ build/hpvm.genhdc.gpu.ll: build/host.gpu.ll
 	$(HPVM_BIN)/opt -mem2reg -enable-new-pm=0 -load $(HPVM_LIB)/HPVMGenHPVM.so -genhpvm -hpvm-hdc-only $< -S -o $@
 # $OPT -mem2reg -enable-new-pm=0 -load $HPVM_LIB/HPVMGenHPVM.so -genhpvm  -hpvm-hdc-only $PREFIX.ll -S -o $PREFIX.genhdc.hpvm.ll
 
+
+
+# Binarize HDC Intrinsics
+build/hdc.binarized.gpu.ll: build/hpvm.genhdc.gpu.ll #hpvm. # -enable-hcc 
+	$(HPVM_BIN)/opt -enable-new-pm=0 $(HDC_LIBS)  $(BINARIZE_FLAGS_GPU)  $< -S -o $@ 
+
 # Lower HDC Intrinsics
-build/hdc.lowered.gpu.ll: build/hpvm.genhdc.gpu.ll #hpvm.
-	$(HPVM_BIN)/opt -enable-new-pm=0 -load $(HPVM_LIB)/LLVMHPVMHDC.so -vector-block-dim=1 -lower-hdc -enable-hcc -dce -simplifycfg $< -S -o $@
+build/hdc.lowered.gpu.ll: build/hdc.binarized.gpu.ll #hpvm.
+	$(HPVM_BIN)/opt -enable-new-pm=0 -load $(HPVM_LIB)/LLVMHPVMHDC.so $(LOWER_HDC_FLAGS_GPU) -dce -simplifycfg $< -S -o $@
 
 # HCC -> HPVM
 build/hpvmc.gpu.ll: build/hdc.lowered.gpu.ll
