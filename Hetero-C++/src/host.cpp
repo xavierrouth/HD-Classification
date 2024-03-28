@@ -106,7 +106,7 @@ T initialize_rp_seed(size_t loop_index_var) {
 	}
 }
 
-float run_hd_classification(
+extern "C" float run_hd_classification(
 	int EPOCH,
 	hvtype* rp_matrix_buffer,
 	hvtype* training_input_vectors,
@@ -311,7 +311,7 @@ int main(int argc, char** argv)
 	return 0;
 }
 
-float run_hd_classification(
+extern "C" float run_hd_classification(
 	int EPOCH,
 	hvtype* rp_matrix_buffer,
 	hvtype* training_input_vectors,
@@ -319,6 +319,44 @@ float run_hd_classification(
 	int* training_labels,
 	int* y_test
 ) {
+	/*
+	std::ofstream file_rp_matrix_buffer("rp_matrix_buffer.csv");
+	std::ofstream file_training_input_vectors("training_input_vectors.csv");
+	std::ofstream file_inference_input_vectors("inference_input_vectors.csv");
+	std::ofstream file_training_labels("training_labels.csv");
+	std::ofstream file_y_test("y_test.csv");
+	for (int i = 0; i < N_FEAT *  Dhv; ++i) {
+		file_rp_matrix_buffer << rp_matrix_buffer[i];
+		if (i + 1 < N_FEAT *  Dhv) {
+			file_rp_matrix_buffer << ",";
+		}
+	}
+	for (int i = 0; i < N_SAMPLE * N_FEAT_PAD; ++i) {
+		file_training_input_vectors << training_input_vectors[i];
+		if (i + 1 < N_SAMPLE * N_FEAT_PAD) {
+			file_training_input_vectors << ",";
+		}
+	}
+	for (int i = 0; i < N_TEST * N_FEAT_PAD; ++i) {
+		file_inference_input_vectors << inference_input_vectors[i];
+		if (i + 1 < N_TEST * N_FEAT_PAD) {
+			file_inference_input_vectors << ",";
+		}
+	}
+	for (int i = 0; i < N_SAMPLE; ++i) {
+		file_training_labels << training_labels[i];
+		if (i + 1 < N_SAMPLE) {
+			file_training_labels << ",";
+		}
+	}
+	for (int i = 0; i < N_TEST; ++i) {
+		file_y_test << y_test[i];
+		if (i + 1 < N_TEST) {
+			file_y_test << ",";
+		}
+	}
+	*/
+
 	size_t rp_matrix_size = N_FEAT * Dhv * sizeof(hvtype);
 	size_t input_vector_size = N_FEAT * sizeof(hvtype);
 	size_t class_size = Dhv * sizeof(hvtype);
