@@ -1,7 +1,7 @@
 #define HPVM 1
 
 
-#define BINARIZE
+// #define BINARIZE
 
 #ifdef HPVM
 #include <heterocc.h>
@@ -362,13 +362,13 @@ int main(int argc, char** argv)
 	int argmax[1];
 	// Training generates classes from labeled data. 
 	// ======= Training Rest Epochs ======= 
-
-#if 1
+    //
+#if 0
 	__hetero_hdc_training_loop(
 		22, (void*) training_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>,
 		EPOCH, N_SAMPLE, N_FEAT, N_FEAT_PAD,
 		rp_matrix_buffer, rp_matrix_size,
-		training_input_vectors, input_vector_size,
+		training_input_vectors, input_vector_size* N_SAMPLE,
 		&classes, classes_size,
 		training_labels,  training_labels_size,
 		encoded_hv_buffer, encoded_hv_size,
@@ -377,6 +377,34 @@ int main(int argc, char** argv)
 		&update_hv, update_hv_size,
 		&argmax[0], sizeof(int)
 	);
+#else
+    printf("Launching Training DAG\n");
+    for(int e = 0; e < EPOCH; e++){
+        for(int t = 0; t < N_SAMPLE; t++){
+
+            void* TrainingIter= __hetero_launch(
+                    (void*)training_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>, 
+                    10,
+                    rp_matrix_buffer, rp_matrix_size,
+                    training_input_vectors, input_vector_size* N_SAMPLE,
+                    &classes, classes_size,
+                    training_labels[t],
+                    encoded_hv_buffer, encoded_hv_size,
+                    scores_buffer, scores_size,
+                    norms_buffer, norms_size,
+                    &update_hv, update_hv_size,
+                    &argmax[0], sizeof(int),
+                    t,
+                    1,
+
+                    &classes, classes_size
+
+                    );
+
+            __hetero_wait(TrainingIter);
+        }
+    }
+
 #endif
 
 
