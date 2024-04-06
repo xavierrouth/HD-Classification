@@ -129,6 +129,45 @@ void rp_encoding_node_copy(/* Input Buffers: 2*/
     return;
 }
 
+
+
+
+template<int D, int K> 
+void InitialUpdateClass(
+        __hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, 
+        __hypervector__<D, hvtype>* update_hv_ptr, size_t update_hv_size, 
+        __hypermatrix__<K, D, hvtype>* classes_ptr, size_t classes_size, 
+        int label
+        ) { 
+    
+#ifndef NODFG
+    void* section = __hetero_section_begin();
+
+    void* task = __hetero_task_begin(
+        /* Input Buffers: 2*/ 4, encoded_hv_ptr, encoded_hv_size, update_hv_ptr, update_hv_size,
+classes_ptr, classes_size, label,
+        /* Output Buffers: 1*/ 1, classes_ptr, classes_size, 
+        "initial_populate"
+    );
+#endif
+		__hypervector__<D, hvtype> update_hv =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, label);
+        *update_hv_ptr = update_hv;
+		*update_hv_ptr = __hetero_hdc_sum<D, hvtype>(*update_hv_ptr, *encoded_hv_ptr); 
+		  __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, label); 
+
+#ifndef NODFG
+    __hetero_task_end(task); 
+
+#endif
+
+
+#ifndef NODFG
+    __hetero_section_end(section);
+#endif
+    return;
+}
+
+
 template<int D, int N_FEATURES>
 void InitialEncodingDFG(
         /* Input Buffers: 2*/
@@ -263,6 +302,7 @@ void __attribute__ ((noinline)) rp_encoding_node_copy_copy(/* Input Buffers: 2*/
 
 
     __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
+      // __hetero_hdc_sim_approx(encoded_hv, 0, N_FEATURES / 2, 2);
     *output_hv_ptr = encoded_hv;
 
 #ifndef NODFG
@@ -307,13 +347,16 @@ void __attribute__ ((noinline)) classification_node_inference(
     #ifdef INFER_HAMMING
     __hypervector__<K, hvtype> score =  __hetero_hdc_hamming_distance<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
     *scores_ptr = score;
-    //__hetero_hdc_sim_approx(score, 0, D, 1);
     #else
 #ifndef ACCEL
+
+
     *norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
     *scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
     *scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
     *scores_ptr = __hetero_hdc_absolute_value<K, hvtype>(*scores_ptr);
+
+
 #endif
     #endif
 
@@ -392,15 +435,16 @@ void classification_node_training_rest(/* Input Buffers: 2 */
     #ifdef TRAIN_HAMMING 
     __hypervector__<K, hvtype> score =  __hetero_hdc_hamming_distance<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
     *scores_ptr = score;
-    //__hetero_hdc_sim_approx(score, 0, D, 1);
     #else
 
 #ifndef ACCEL
+
 
     *norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
     *scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
     *scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
     *scores_ptr = __hetero_hdc_absolute_value<K, hvtype>(*scores_ptr);
+
 #endif
     #endif
 

@@ -15,12 +15,12 @@ CFLAGS := -O1 -fenable-matrix -fno-discard-value-names -fno-exceptions -lm -lrt 
 
 HDC_LIBS := -load $(HPVM_LIB)/LLVMHPVMHDC.so -load $(HPVM_LIB)/LLVMHDCBinProp.so  -load $(HPVM_LIB)/LLVMBinarize.so  
 
-LOWER_HDC_FLAGS_CPU := -vector-block-dim=1 -lower-hdc  
-BINARIZE_FLAGS_CPU := #-hdc-bin-prop -hdc-binarize
+LOWER_HDC_FLAGS_CPU := -vector-block-dim=1 -lower-hdc #-matmul-binarize  
+BINARIZE_FLAGS_CPU :=   # -hdc-bin-prop -hdc-binarize 
 
 
 LOWER_HDC_FLAGS_GPU := $(LOWER_HDC_FLAGS_CPU)  -enable-hcc
-BINARIZE_FLAGS_GPU := -hdc-bin-prop -hdc-binarize
+BINARIZE_FLAGS_GPU := #-hdc-bin-prop -hdc-binarize
 
 
 # PARAMETERS := -DHPVM -DDEVICE=hpvm::CPU_TARGET
@@ -147,7 +147,7 @@ build/hpvm.gpu.ll: build/hpvmc.gpu.ll
 
 build/hpvmcompiled.gpu.ll: build/hpvm.gpu.ll
 	$(HPVM_BIN)/opt -enable-new-pm=0 -load $(HPVM_LIB)/HPVMBuildDFG.so -load $(HPVM_LIB)/HPVMLocalMem.so -load $(HPVM_LIB)/HPVMDFG2LLVM_GPU_OCL.so -load $(HPVM_LIB)/HPVMDFG2LLVM_CPU.so -load $(HPVM_LIB)/HPVMClearDFG.so -load $(HPVM_LIB)/HPVMDFGTransformPasses.so -localmem -dfg2llvm-gpu-ocl -dfg2llvm-cpu -clearDFG -hpvm-timers-cpu -hpvm-timers-ptx $< -S -o $@
-	#$(HPVM_BIN)/llvm-ocl build/hpvm.gpu.kernels.ll
+	$(HPVM_BIN)/llvm-ocl build/hpvm.gpu.kernels.ll
 
 HPVM_RT := $(HPVM_BUILD_DIR)/tools/hpvm/projects/hpvm-rt/hpvm-rt.bc
 

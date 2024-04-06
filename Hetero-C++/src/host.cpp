@@ -330,12 +330,30 @@ int main(int argc, char** argv)
 		encoded_hv, class_size
 	);
 
-	for (int i = 0; i < N_SAMPLE; i++) {
-		int label = training_labels[i];
-		update_hv =  __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, label);
-		update_hv = __hetero_hdc_sum<Dhv, hvtype>(update_hv, encoded_hv[i]); 
-		__hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, update_hv, label); 
-	}
+
+
+    for (int i = 0; i < N_SAMPLE; i++) {
+
+        int label = training_labels[i];
+#if 1
+        update_hv =  __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, label);
+        update_hv = __hetero_hdc_sum<Dhv, hvtype>(update_hv, encoded_hv[i]); 
+        __hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, update_hv, label); 
+#else
+
+        void* PopDAG = __hetero_launch(
+                (void*) InitialUpdateClass<Dhv,  N_CLASS>,
+                4,
+                &encoded_hv[i], encoded_hv_size,
+                encoded_hv_buffer, encoded_hv_size,
+                &classes, classes_size,
+                label,
+                1,
+                &classes, classes_size
+                );
+        __hetero_wait(PopDAG);
+#endif
+    }
 
     
 
