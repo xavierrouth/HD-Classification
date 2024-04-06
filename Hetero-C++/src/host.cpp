@@ -402,6 +402,8 @@ extern "C" float run_hd_classification(
 	// Training generates classes from labeled data. 
 	// ======= Training Rest Epochs ======= 
 
+	{
+	auto t_start = std::chrono::high_resolution_clock::now();
 	__hetero_hdc_training_loop(
 		22, (void*) training_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>,
 		EPOCH, N_SAMPLE, N_FEAT, N_FEAT_PAD,
@@ -415,9 +417,14 @@ extern "C" float run_hd_classification(
 		&update_hv, update_hv_size,
 		&argmax[0], sizeof(int)
 	);
+	auto t_end = std::chrono::high_resolution_clock::now();
+	long mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_end-t_start).count();
+	std::cout << "Training: " << mSec << " mSec\n";
+	}
 
 	// ============ Inference =============== //
 
+	{
 	auto t_start = std::chrono::high_resolution_clock::now();
 	__hetero_hdc_inference_loop(17, (void*) inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>,
 		N_TEST, N_FEAT, N_FEAT_PAD,
@@ -431,7 +438,8 @@ extern "C" float run_hd_classification(
 	);
 	auto t_end = std::chrono::high_resolution_clock::now();
 	long mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_end-t_start).count();
-	std::cout << "Inference: " << mSec << "\n";
+	std::cout << "Inference: " << mSec << " mSec\n";
+	}
 
 	//std::ofstream myfile("out.txt");
 
