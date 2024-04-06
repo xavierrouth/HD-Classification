@@ -17,7 +17,8 @@ typedef int16_t hvtype;
 template <typename T>
 T zero_hv(size_t loop_index_var) { return 0; }
 
-template<int D, int N_FEATURES>
+// Need multiple copies because of HPVM limitations, so add unused template parameter.
+template<int D, int N_FEATURES, int unused>
 void rp_encoding_node(/* Input Buffers: 2*/ __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, __hypervector__<N_FEATURES, hvtype>* input_datapoint_ptr, size_t input_datapoint_size, /* Output Buffers: 1*/ __hypervector__<D, hvtype>* output_hv_ptr, size_t output_hv_size) {
 
 #ifndef NODFG
@@ -43,32 +44,6 @@ void rp_encoding_node(/* Input Buffers: 2*/ __hypermatrix__<D, N_FEATURES, hvtyp
 }
 
 template<int D, int N_FEATURES>
-void rp_encoding_node_copy(/* Input Buffers: 2*/ __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, __hypervector__<N_FEATURES, hvtype>* input_datapoint_ptr, size_t input_datapoint_size, /* Output Buffers: 1*/ __hypervector__<D, hvtype>* output_hv_ptr, size_t output_hv_size) {
-    
-#ifndef NODFG
-    void* section = __hetero_section_begin();
-    void* task = __hetero_task_begin(/* Input Buffers: 2*/ 3, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size, /* Parameters: 0*/ /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size, "inner_rp_encoding_task");
-
-    __hetero_hint(DEVICE);
-#endif
-    
-    // This zero initialization should no longer be needed as matmul self-initializes with 0
-    /*
-    __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
-    *output_hv_ptr = encoded_hv;
-    */
-
-    __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
-    *output_hv_ptr = encoded_hv;
-#ifndef NODFG
-    __hetero_task_end(task); 
-
-    __hetero_section_end(section);
-#endif
-    return;
-}
-
-template<int D, int N_FEATURES>
 void InitialEncodingDFG(/* Input Buffers: 2*/ __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, __hypervector__<N_FEATURES, hvtype>* input_datapoint_ptr, size_t input_datapoint_size, /* Output Buffers: 1*/ __hypervector__<D, hvtype>* output_hv_ptr, size_t output_hv_size) {
     
 #ifndef NODFG
@@ -78,7 +53,7 @@ void InitialEncodingDFG(/* Input Buffers: 2*/ __hypermatrix__<D, N_FEATURES, hvt
 #endif
 
     // Specifies that the following node is performing an HDC Encoding step
-    __hetero_hdc_encoding(6, (void*) rp_encoding_node_copy<D, N_FEATURES>, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size);
+    __hetero_hdc_encoding(6, (void*) rp_encoding_node<D, N_FEATURES, 0>, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size);
 
 #ifndef NODFG
     __hetero_task_end(task); 
@@ -131,41 +106,6 @@ void gen_rp_matrix(/* Input Buffers*/ __hypervector__<D, hvtype>* rp_seed_vector
    __hetero_section_end(root_section);
 #endif
 }
-
-
-
-
-template<int D, int N_FEATURES>
-void rp_encoding_node_copy_copy(/* Input Buffers: 2*/ __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, __hypervector__<N_FEATURES, hvtype>* input_datapoint_ptr, size_t input_datapoint_size, /* Output Buffers: 1*/ __hypervector__<D, hvtype>* output_hv_ptr, size_t output_hv_size) {
-    
-#ifndef NODFG
-    void* section = __hetero_section_begin();
-
-    void* task = __hetero_task_begin( /* Input Buffers: 2*/ 3, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size, /* Parameters: 0*/ /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size, "inner_rp_encoding_task" );
-
-    __hetero_hint(DEVICE);
-#endif
-    
-    // This zero initialization should no longer be needed as matmul self-initializes with 0
-    /*
-    __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_create_hypervector<D, hvtype>(0, (void*) zero_hv<hvtype>);
-    *output_hv_ptr = encoded_hv;
-    */
-
-    __hypervector__<D, hvtype> encoded_hv = __hetero_hdc_matmul<D, N_FEATURES, hvtype>(*input_datapoint_ptr, *rp_matrix_ptr); 
-    //__hetero_hdc_sim_approx(encoded_hv, 0, N_FEATURES, 2);
-    *output_hv_ptr = encoded_hv;
-
-#ifndef NODFG
-    __hetero_task_end(task); 
-
-    __hetero_section_end(section);
-#endif
-    return;
-}
-
-
-// In the streaming implementation, this runs for each encoded HV, so N_VEC * EPOCHs times.
 
 /* Just make guesses based on cossim  */
 template<int D, int K, int N_VEC> // ONLY RUNS ONCE
@@ -338,7 +278,7 @@ void encoding_and_training_node( /* Input buffers: 3*/  __hypermatrix__<D, N_FEA
     void* encoding_task = __hetero_task_begin( /* Input Buffers: 3 */ 3, rp_matrix_ptr, rp_matrix_size, datapoint_vec_ptr, datapoint_vec_size,  encoded_hv_ptr, encoded_hv_size, /* Output Buffers: 1 */ 1, encoded_hv_ptr, encoded_hv_size, "training_encoding_task"   );
 #endif
 
-    rp_encoding_node<D, N_FEATURES>(rp_matrix_ptr, rp_matrix_size, datapoint_vec_ptr, datapoint_vec_size, encoded_hv_ptr, encoded_hv_size);
+    rp_encoding_node<D, N_FEATURES, 1>(rp_matrix_ptr, rp_matrix_size, datapoint_vec_ptr, datapoint_vec_size, encoded_hv_ptr, encoded_hv_size);
 
 #ifndef NODFG
     __hetero_task_end(encoding_task);
@@ -386,7 +326,7 @@ void encoding_and_inference_node( /* Input buffers: 3*/  __hypermatrix__<D, N_FE
     // Re-encode each iteration.
     void* encoding_task = __hetero_task_begin( /* Input Buffers: 3 */ 3, rp_matrix_ptr, rp_matrix_size, datapoint_vec_ptr, datapoint_vec_size,  encoded_hv_ptr, encoded_hv_size, /* Output Buffers: 1 */ 1, encoded_hv_ptr, encoded_hv_size, "inference_encoding_task"   );
 #endif
-    rp_encoding_node_copy_copy<D, N_FEATURES>(rp_matrix_ptr, rp_matrix_size, datapoint_vec_ptr, datapoint_vec_size, encoded_hv_ptr, encoded_hv_size);
+    rp_encoding_node<D, N_FEATURES, 2>(rp_matrix_ptr, rp_matrix_size, datapoint_vec_ptr, datapoint_vec_size, encoded_hv_ptr, encoded_hv_size);
 
 #ifndef NODFG
     __hetero_task_end(encoding_task);
