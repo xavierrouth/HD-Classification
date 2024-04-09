@@ -4,7 +4,7 @@
 #include <heterocc.h>
 #include <iostream>
 
-#define INFER_HAMMING
+// #define INFER_HAMMING
 
 // #define TRAIN_HAMMING
 
@@ -150,10 +150,9 @@ classes_ptr, classes_size, label,
         "initial_populate"
     );
 #endif
-		__hypervector__<D, hvtype> update_hv =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, label);
-        *update_hv_ptr = update_hv;
-		*update_hv_ptr = __hetero_hdc_sum<D, hvtype>(*update_hv_ptr, *encoded_hv_ptr); 
-		  __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, label); 
+		 __hypervector__<D, hvtype> update_hv =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, label);
+		 *update_hv_ptr = __hetero_hdc_sum<D, hvtype>(update_hv, *encoded_hv_ptr); 
+		__hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, label); 
 
 #ifndef NODFG
     __hetero_task_end(task); 
@@ -439,12 +438,15 @@ void classification_node_training_rest(/* Input Buffers: 2 */
 
 #ifndef ACCEL
 
+    /*
+    __hypervector__<K, hvtype> score =  __hetero_hdc_cossim<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
+    *scores_ptr = score;
+    */
 
     *norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
     *scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
     *scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
     *scores_ptr = __hetero_hdc_absolute_value<K, hvtype>(*scores_ptr);
-
 #endif
     #endif
 
@@ -459,7 +461,8 @@ void classification_node_training_rest(/* Input Buffers: 2 */
         /* Output Buffers: 1*/ 2,  classes_ptr, classes_size, argmax, argmax_size, "training_rest_find_score_task"
     );  
 
-    __hetero_hint(DEVICE);
+    //__hetero_hint(DEVICE);
+    // __hetero_hint(hpvm::GPU_TARGET);
 #endif
 
     {
@@ -487,19 +490,22 @@ void classification_node_training_rest(/* Input Buffers: 2 */
         /* Output Buffers: 1*/ 1,  classes_ptr, classes_size, "update_classes_task"
     );  
 
-    __hetero_hint(DEVICE);
+    // __hetero_hint(DEVICE);
+
+    //__hetero_hint(hpvm::GPU_TARGET);
 #endif
 
     int max_idx = *argmax;
     // Update the correct and mispredicted class
+
     if (label != max_idx) { // Incorrect prediction
 
         auto label_row =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, label);
-        *update_hv_ptr = __hetero_hdc_sum<D, hvtype>(label_row, *encoded_hv_ptr); // May need an instrinsic for this.
+        *update_hv_ptr = __hetero_hdc_sum<D, hvtype>(*encoded_hv_ptr, label_row); // May need an instrinsic for this.
         __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, label); // How do we normalize?
 
-        auto max_idx_row =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, max_idx);
-        *update_hv_ptr = __hetero_hdc_sub<D, hvtype>(max_idx_row, *encoded_hv_ptr); // May need an instrinsic for this.
+         auto max_idx_row =  __hetero_hdc_get_matrix_row<K, D, hvtype>(*classes_ptr, K, D, max_idx);
+         *update_hv_ptr = __hetero_hdc_sub<D, hvtype>(max_idx_row, *encoded_hv_ptr); // May need an instrinsic for this.
         __hetero_hdc_set_matrix_row<K, D, hvtype>(*classes_ptr, *update_hv_ptr, max_idx); // How do we normalize?
 
     }

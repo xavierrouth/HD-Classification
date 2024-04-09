@@ -1,7 +1,7 @@
 #define HPVM 1
 
 
-#define BINARIZE
+// #define BINARIZE
 
 #ifdef HPVM
 #include <heterocc.h>
@@ -317,6 +317,7 @@ int main(int argc, char** argv)
 
 #endif
 
+    auto encoding_start = std::chrono::high_resolution_clock::now();
 
 	// ============ Training ===============
     //
@@ -335,7 +336,7 @@ int main(int argc, char** argv)
     for (int i = 0; i < N_SAMPLE; i++) {
 
         int label = training_labels[i];
-#if 1
+#if 0
         update_hv =  __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, label);
         update_hv = __hetero_hdc_sum<Dhv, hvtype>(update_hv, encoded_hv[i]); 
         __hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, update_hv, label); 
@@ -357,11 +358,17 @@ int main(int argc, char** argv)
 
     
 
+    auto encoding_end = std::chrono::high_resolution_clock::now();
+    auto encoding_time = encoding_end - encoding_start;
+
+    long encodingMSec = std::chrono::duration_cast<std::chrono::milliseconds>(encoding_time).count();
+    std::cout << "Encoding took "<< encodingMSec << " milliseconds " << std::endl;
 
 
 	int argmax[1];
 	// Training generates classes from labeled data. 
 	// ======= Training Rest Epochs ======= 
+    auto training_start = std::chrono::high_resolution_clock::now();
 
 #if 1
 	__hetero_hdc_training_loop(
@@ -378,6 +385,12 @@ int main(int argc, char** argv)
 		&argmax[0], sizeof(int)
 	);
 #endif
+
+    auto training_end = std::chrono::high_resolution_clock::now();
+    auto training_time = training_end - training_start;
+
+    long trainingMSec = std::chrono::duration_cast<std::chrono::milliseconds>(training_time).count();
+    std::cout << "Training took "<< trainingMSec << " milliseconds " << std::endl;
 
 
     // Binarize the class hypermatrix pre-training
