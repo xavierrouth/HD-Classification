@@ -26,7 +26,7 @@ void rp_encoding_node(/* Input Buffers: 2*/ __hypermatrix__<D, N_FEATURES, hvtyp
 
     void* task = __hetero_task_begin(/* Input Buffers: 2*/ 3, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size, /* Parameters: 0*/ /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size, "inner_rp_encoding_task");
 
-    __hetero_hint(DEVICE);
+    //__hetero_hint(DEVICE);
 #endif
 
     // This zero initialization should no longer be needed as matmul self-initializes with 0
@@ -77,7 +77,7 @@ void gen_rp_matrix(/* Input Buffers*/ __hypervector__<D, hvtype>* rp_seed_vector
     {
     void* gen_shifted_task = __hetero_task_begin(/* Num Inputs */ 3, rp_seed_vector,   rp_seed_vector_size, shifted_matrix,   shifted_matrix_size, row_buffer, row_buffer_size, /* Num Outputs */ 1, shifted_matrix,   shifted_matrix_size, "gen_shifted_matrix_task");
 
-    __hetero_hint(DEVICE);
+    //__hetero_hint(DEVICE);
 #endif
 
     for (int i = 0; i < N_FEATURES; i++) {
@@ -91,7 +91,7 @@ void gen_rp_matrix(/* Input Buffers*/ __hypervector__<D, hvtype>* rp_seed_vector
 
    {
     void* transpose_task = __hetero_task_begin(/* Num Inputs */ 2, shifted_matrix,   shifted_matrix_size, transposed_matrix,   transposed_matrix_size, /* Num Outputs */ 1, transposed_matrix,   transposed_matrix_size, "gen_tranpose_task");
-    __hetero_hint(DEVICE);
+    //__hetero_hint(DEVICE);
 #endif
     *transposed_matrix = __hetero_hdc_matrix_transpose<N_FEATURES, D, hvtype>(*shifted_matrix, N_FEATURES, D);
 #ifndef NODFG

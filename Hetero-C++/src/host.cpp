@@ -222,6 +222,7 @@ extern "C" float run_hd_classification(int EPOCH, hvtype* rp_matrix_buffer, hvty
 	// ======= Training Rest Epochs ======= 
 
 	{
+	std::cout << "Begin Training\n";
 	auto t_start = std::chrono::high_resolution_clock::now();
 	__hetero_hdc_training_loop(22, (void*) training_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>, EPOCH, N_SAMPLE, N_FEAT, N_FEAT_PAD, rp_matrix_buffer, rp_matrix_size, training_input_vectors, input_vector_size, &classes, classes_size, training_labels, training_labels_size, encoded_hv_buffer, encoded_hv_size, scores_buffer, scores_size, norms_buffer, norms_size, &update_hv, update_hv_size, &argmax[0], sizeof(int));
 	auto t_end = std::chrono::high_resolution_clock::now();
@@ -232,6 +233,7 @@ extern "C" float run_hd_classification(int EPOCH, hvtype* rp_matrix_buffer, hvty
 	// ============ Inference =============== //
 
 	{
+	std::cout << "Begin Inference\n";
 	auto t_start = std::chrono::high_resolution_clock::now();
 	__hetero_hdc_inference_loop(17, (void*) inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>, N_TEST, N_FEAT, N_FEAT_PAD, rp_matrix_buffer, rp_matrix_size, inference_input_vectors, input_vector_size, &classes, classes_size, inference_labels, inference_labels_size, encoded_hv_buffer, encoded_hv_size, scores_buffer, scores_size, norms_buffer, norms_size);
 	auto t_end = std::chrono::high_resolution_clock::now();
