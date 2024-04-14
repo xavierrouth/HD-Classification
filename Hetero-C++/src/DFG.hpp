@@ -52,8 +52,7 @@ void InitialEncodingDFG(/* Input Buffers: 2*/ __hypermatrix__<D, N_FEATURES, hvt
     void* task = __hetero_task_begin(/* Input Buffers: 2*/ 3, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size, /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size, "initial_encoding_wrapper");
 #endif
 
-    // Specifies that the following node is performing an HDC Encoding step
-    __hetero_hdc_encoding(6, (void*) rp_encoding_node<D, N_FEATURES, 0>, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size);
+    rp_encoding_node<D, N_FEATURES, 0>(rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size);
 
 #ifndef NODFG
     __hetero_task_end(task); 
@@ -354,7 +353,7 @@ void inference_root_node( /* Input buffers: 3*/  __hypermatrix__<D, N_FEATURES, 
     void* inference_task = __hetero_task_begin( /* Input Buffers: 3 */ 7,  rp_matrix_ptr, rp_matrix_size,  datapoint_vec_ptr, datapoint_vec_size,  encoded_hv_ptr, encoded_hv_size, classes_ptr, classes_size,  label_ptr, label_size, scores_ptr, scores_size, norms_ptr, norms_size, /* Output Buffers: 1 */ 1,encoded_hv_ptr, encoded_hv_size, "inference_task" );
 #endif
 
-    __hetero_hdc_inference( 14, (void*) encoding_and_inference_node<D, K, N_VEC, N_FEATURES>, rp_matrix_ptr, rp_matrix_size,  datapoint_vec_ptr, datapoint_vec_size,  classes_ptr, classes_size,  label_ptr, label_size, encoded_hv_ptr, encoded_hv_size, scores_ptr, scores_size, norms_ptr, norms_size );
+    encoding_and_inference_node<D, K, N_VEC, N_FEATURES>(rp_matrix_ptr, rp_matrix_size,  datapoint_vec_ptr, datapoint_vec_size,  classes_ptr, classes_size,  label_ptr, label_size, encoded_hv_ptr, encoded_hv_size, scores_ptr, scores_size, norms_ptr, norms_size);
 
 
 #ifndef NODFG
