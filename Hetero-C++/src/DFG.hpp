@@ -14,9 +14,6 @@ typedef int16_t hvtype;
 //
 // RP encoding reduces N_features -> D 
 
-template <typename T>
-T zero_hv(size_t loop_index_var) { return 0; }
-
 // Need multiple copies because of HPVM limitations, so add unused template parameter.
 template<int D, int N_FEATURES, int unused>
 void rp_encoding_node(/* Input Buffers: 2*/ __hypermatrix__<D, N_FEATURES, hvtype>* rp_matrix_ptr, size_t rp_matrix_size, __hypervector__<N_FEATURES, hvtype>* input_datapoint_ptr, size_t input_datapoint_size, /* Output Buffers: 1*/ __hypervector__<D, hvtype>* output_hv_ptr, size_t output_hv_size) {

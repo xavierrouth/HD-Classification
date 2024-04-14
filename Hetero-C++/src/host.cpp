@@ -166,11 +166,10 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 	size_t scores_size = N_CLASS * sizeof(hvtype);
 	size_t norms_size = N_CLASS * sizeof(hvtype);
 
-	__hypervector__<Dhv, hvtype> update_hv = __hetero_hdc_hypervector<Dhv, hvtype>();
-	__hypermatrix__<N_CLASS, Dhv, hvtype> classes = __hetero_hdc_create_hypermatrix<N_CLASS, Dhv, hvtype>(0, (void*) zero_hv<hvtype>);
+	__hypervector__<Dhv, hvtype> update_hv = __hetero_hdc_create_hypervector<Dhv, hvtype>(0, (void*) zero<hvtype>);
+	__hypermatrix__<N_CLASS, Dhv, hvtype> classes = __hetero_hdc_create_hypermatrix<N_CLASS, Dhv, hvtype>(0, (void*) zero<hvtype>);
 
-	// Static since this is too large for the stack.
-	static __hypervector__<Dhv, hvtype> encoded_hv[N_SAMPLE];
+	__hypermatrix__<N_SAMPLE, Dhv, hvtype> encoded_hvs = __hetero_hdc_create_hypermatrix<N_SAMPLE, Dhv, hvtype>(0, (void*) zero<hvtype>);
 	hvtype encoded_hv_buffer[Dhv];
 	hvtype scores_buffer[N_CLASS];
 	hvtype norms_buffer[N_CLASS];
@@ -180,13 +179,14 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 	// ============ Training ===============
 
 	// Initialize class hvs.
-	__hetero_hdc_encoding_loop(0, (void*) InitialEncodingDFG<Dhv, N_FEAT>, N_SAMPLE, N_CLASS, N_FEAT, N_FEAT_PAD, rp_matrix_buffer, rp_matrix_size, (hvtype *) training_input_vectors, input_vector_size, encoded_hv, class_size);
+	__hetero_hdc_encoding_loop(0, (void*) InitialEncodingDFG<Dhv, N_FEAT>, N_SAMPLE, N_CLASS, N_FEAT, N_FEAT_PAD, rp_matrix_buffer, rp_matrix_size, (hvtype *) training_input_vectors, input_vector_size, __hetero_hdc_get_handle(encoded_hvs), class_size);
 
 	for (int i = 0; i < N_SAMPLE; i++) {
 		int label = training_labels[i];
-		update_hv =  __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, label);
-		update_hv = __hetero_hdc_sum<Dhv, hvtype>(update_hv, encoded_hv[i]); 
-		__hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, update_hv, label); 
+		auto class_hv = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, label);
+		auto encoded_hv = __hetero_hdc_get_matrix_row<N_SAMPLE, Dhv, hvtype>(encoded_hvs, N_SAMPLE, Dhv, i);
+		auto sum_hv = __hetero_hdc_sum<Dhv, hvtype>(class_hv, encoded_hv); 
+		__hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, sum_hv, label); 
 	}
 
 	int argmax[1];
