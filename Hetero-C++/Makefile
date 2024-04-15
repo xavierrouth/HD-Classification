@@ -64,8 +64,8 @@ build/hdc.lowered.accel.ll: build/hpvm.genhdc.accel.ll #hpvm. # -enable-hcc
 ### ---------- CPU ---------------
 
 # Generate Executable
-host-cpu: build/output.ll
-	$(HPVM_INSTALL_DIR)/build/bin/clang++ -I$(OPENCL_PATH)/include/CL -L$(OPENCL_LIB_PATH) -lm -lrt -pthread -lOpenCL -O3 $< -o $@ 
+host-cpu: build/output.ll cpu_cu_rt.cpp
+	$(HPVM_INSTALL_DIR)/build/bin/clang++ -I$(OPENCL_PATH)/include/CL -L$(OPENCL_LIB_PATH) -lm -lrt -pthread -lOpenCL -O3 $^ -o $@ 
 #
 
 # Clang Frontend to IR

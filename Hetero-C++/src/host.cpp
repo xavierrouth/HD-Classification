@@ -9,6 +9,15 @@
 #include <random>
 #include <cstring>
 
+#ifdef NODFG
+#define POSTFIX ".cublas.txt"
+#else
+#define POSTFIX ".cpu.txt"
+#endif
+
+extern "C" void cu_rt_dump_float_hv(void *hv, size_t row, const char * filename);
+extern "C" void cu_rt_dump_float_hm(void *hv, size_t row, size_t col, const char * filename);
+
 template <typename T>
 void datasetRead(std::vector<T> &data, std::string path){
 	std::ifstream file_(path, std::ios::in | std::ios::binary);
@@ -166,6 +175,10 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 	size_t scores_size = N_CLASS * sizeof(hvtype);
 	size_t norms_size = N_CLASS * sizeof(hvtype);
 
+	//cu_rt_dump_float_hm(rp_matrix_buffer, Dhv, N_FEAT, "rp_matrix_buffer" POSTFIX);
+	//cu_rt_dump_float_hm(training_input_vectors, N_SAMPLE, N_FEAT_PAD, "training_input_vectors" POSTFIX);
+	//cu_rt_dump_float_hm(inference_input_vectors, N_TEST, N_FEAT_PAD, "inference_input_vectors" POSTFIX);
+
 	__hypervector__<Dhv, hvtype> update_hv = __hetero_hdc_create_hypervector<Dhv, hvtype>(0, (void*) zero<hvtype>);
 	__hypermatrix__<N_CLASS, Dhv, hvtype> classes = __hetero_hdc_create_hypermatrix<N_CLASS, Dhv, hvtype>(0, (void*) zero<hvtype>);
 
@@ -189,6 +202,9 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 		__hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, sum_hv, label); 
 	}
 
+	//cu_rt_dump_float_hm(__hetero_hdc_get_handle(classes), N_CLASS, Dhv, "classes" POSTFIX);
+	//cu_rt_dump_float_hm(__hetero_hdc_get_handle(encoded_hvs), N_SAMPLE, Dhv, "encoded_hvs" POSTFIX);
+
 	int argmax[1];
 	// Training generates classes from labeled data. 
 	// ======= Training Rest Epochs ======= 
@@ -201,6 +217,9 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 	long mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_end-t_start).count();
 	std::cout << "Training: " << mSec << " mSec\n";
 	}
+	//cu_rt_dump_float_hm(__hetero_hdc_get_handle(classes), N_CLASS, Dhv, "post_train_classes" POSTFIX);
+	//cu_rt_dump_float_hv(__hetero_hdc_get_handle(scores_buffer), N_CLASS, "post_train_scores_buffer" POSTFIX);
+	//cu_rt_dump_float_hv(__hetero_hdc_get_handle(norms_buffer), N_CLASS, "post_train_norms_buffer" POSTFIX);
 
 	// ============ Inference =============== //
 
@@ -212,11 +231,17 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 	long mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_end-t_start).count();
 	std::cout << "Inference: " << mSec << " mSec\n";
 	}
+	//cu_rt_dump_float_hm(__hetero_hdc_get_handle(classes), N_CLASS, Dhv, "post_infer_classes" POSTFIX);
+	//cu_rt_dump_float_hv(__hetero_hdc_get_handle(scores_buffer), N_CLASS, "post_infer_scores_buffer" POSTFIX);
+	//cu_rt_dump_float_hv(__hetero_hdc_get_handle(norms_buffer), N_CLASS, "post_infer_norms_buffer" POSTFIX);
 
-	//std::ofstream myfile("out.txt");
+	std::ofstream myfile("out" POSTFIX);
 
 	int correct = 0;
-	for(int i = 0; i < N_TEST; i++) { correct += inference_labels[i] == y_test[i]; }
+	for(int i = 0; i < N_TEST; i++) {
+		correct += inference_labels[i] == y_test[i]; 
+		myfile << y_test[i] << " " << inference_labels[i] << std::endl;
+	}
 
 	return float(correct)/N_TEST;
 }
