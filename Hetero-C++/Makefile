@@ -15,6 +15,8 @@ CFLAGS := -fenable-matrix -fno-discard-value-names -fno-exceptions -lm -lrt -pth
 
 HDC_LIBS := -load $(HPVM_LIB)/LLVMHPVMHDC.so -load $(HPVM_LIB)/LLVMHDCBinProp.so  -load $(HPVM_LIB)/LLVMBinarize.so  
 
+NVCC ?= "/usr/local/cuda"/bin/nvcc
+
 O1_FLAGS = -targetlibinfo -tti -tbaa -scoped-noalias-aa -assumption-cache-tracker -profile-summary-info -forceattrs -inferattrs -ipsccp -called-value-propagation -globalopt -domtree -mem2reg -deadargelim -basic-aa -aa -loops -lazy-branch-prob -lazy-block-freq -opt-remark-emitter -instcombine -simplifycfg -basiccg -globals-aa -prune-eh -always-inline -function-attrs  -memoryssa -early-cse-memssa -speculative-execution -lazy-value-info -jump-threading -correlated-propagation -libcalls-shrinkwrap -branch-prob -block-freq -pgo-memop-opt -tailcallelim -reassociate -loop-simplify -lcssa-verification -lcssa -scalar-evolution -loop-rotate -licm -loop-unswitch -indvars -loop-idiom -loop-deletion -loop-unroll -memdep -memcpyopt -sccp -demanded-bits -bdce -dse -postdomtree -adce -barrier -rpo-function-attrs -globaldce -float2int -loop-accesses -loop-distribute -loop-vectorize -loop-load-elim -alignment-from-assumptions -strip-dead-prototypes -loop-sink -instsimplify -div-rem-pairs -verify -ee-instrument -early-cse -lower-expect
 
 # PARAMETERS := -DHPVM -DDEVICE=hpvm::CPU_TARGET
@@ -82,8 +84,7 @@ build/hdc.lowered.cpu.ll: build/hpvm.genhdc.cpu.ll #hpvm. # -enable-hcc
 	
 # HCC -> HPVM
 build/hpvmc.cpu.ll: build/hdc.lowered.cpu.ll
-	$(HPVM_BIN)/opt $< -mem2reg -sroa -dce -S -o $@
-	$(HPVM_BIN)/hcc $@ -declsfile $(HPVM_DECLS_FILE) -sanitise-funcs --dot-dfg -skip-verify  -S -o $@
+	$(HPVM_BIN)/hcc $< -declsfile $(HPVM_DECLS_FILE) -sanitise-funcs --dot-dfg -skip-verify  -S -o $@
 	$(HPVM_BIN)/opt $@ -dce -S -o $@
 
 # GenHPVM for the HPVM IR
@@ -177,7 +178,34 @@ build/output.fpga.ll: build/hpvm.host.fpga.ll
 	$(HPVM_INSTALL_DIR)/build/bin/llvm-link $< $(HPVM_RT) -S -o $@ 
 	$(HPVM_INSTALL_DIR)/build/bin/opt -dce -globaldce $< -S -o $<
 
+### ---------- CUBLAS ---------------
+
+# Generate Executable
+host-cublas: build/host.cublas.o build/hdc_cuda_rt.o build/hdc_kernels.o build/hdc_cuda_rt.o build/hdc_kernels.o
+	$(NVCC) $^ -o $@ -lcudadevrt -lcudart -lcublas
+
+# Clang Frontend to IR
+build/host.cublas.ll: src/host.cpp
+	mkdir -p build
+	$(HPVM_BIN)/clang++ -DNODFG -O0 -Xclang -disable-O0-optnone $(CFLAGS) $(INCLUDES) -S -emit-llvm -fPIC $^ -o $@ 
+
+# GenHPVM for HDC only and mem2reg
+build/hpvm.genhdc.cublas.ll: build/host.cublas.ll
+	$(HPVM_BIN)/opt -mem2reg $(O1_FLAGS) -enable-new-pm=0 -load $(HPVM_LIB)/HPVMGenHPVM.so -genhpvm -hpvm-hdc-only $< -S -o $@
+
+
+# Lower HDC Intrinsics
+build/hdc.lowered.cublas.ll: build/hpvm.genhdc.cublas.ll #hpvm. # -enable-hcc 
+	$(HPVM_BIN)/opt -enable-new-pm=0 -load $(HPVM_LIB)/LLVMHPVMHDC.so  -vector-block-dim=1 -lower-hdc -compile-cublas -dce -simplifycfg $(O1_FLAGS) $< -S -o $@ 
+build/host.cublas.o: build/hdc.lowered.cublas.ll
+	$(HPVM_BIN)/clang -fPIC -c -Ofast -march=native $< -o $@
+
+build/hdc_cuda_rt.o: $(HPVM_INSTALL_DIR)/projects/hpvm-hdc/cuda-impl/hdc_cuda_rt.cu
+	$(NVCC) -c -O2 $^ -o $@ 
+build/hdc_kernels.o: $(HPVM_INSTALL_DIR)/projects/hpvm-hdc/cuda-impl/hdc_kernels.cu
+	$(NVCC) -c -O2 $^ -o $@ 
+
 .PHONY: clean
 
 clean:
-	rm -rf *.dot build/*.ll host-gpu host-cpu host-accel host-sim host-fpga
+	rm -rf *.dot build/*.ll host-gpu host-cpu host-accel host-sim host-fpga host-cublas

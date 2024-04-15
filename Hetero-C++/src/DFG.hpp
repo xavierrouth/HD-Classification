@@ -126,13 +126,13 @@ void __attribute__ ((noinline)) classification_node_inference( __hypervector__<D
     *scores_ptr = score;
     #else
 #ifndef ACCEL
-    //*norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
-    //*scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
-    //*scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
-    //*scores_ptr = __hetero_hdc_absolute_value<K, hvtype>(*scores_ptr);
-    __hypervector__<K, hvtype> score =  __hetero_hdc_cossim<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
+    *norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
+    *scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
+    *scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
+    *scores_ptr = __hetero_hdc_absolute_value<K, hvtype>(*scores_ptr);
+    //__hypervector__<K, hvtype> score =  __hetero_hdc_cossim<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
     //__hetero_hdc_sim_approx(score, 0, D / 4, 4);
-    *scores_ptr = score;
+    //*scores_ptr = score;
 #endif
     #endif
 
@@ -197,12 +197,12 @@ void classification_node_training_rest(/* Input Buffers: 2 */ __hypervector__<D,
     #else
 
 #ifndef ACCEL
-    //*norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
-    //*scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
-    //*scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
-    //*scores_ptr = __hetero_hdc_absolute_value<K, hvtype>(*scores_ptr);
-    __hypervector__<K, hvtype> score =  __hetero_hdc_cossim<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
-    *scores_ptr = score;
+    *norms_ptr = __hetero_hdc_l2norm<K, D, hvtype>(*classes_ptr);
+    *scores_ptr = __hetero_hdc_matmul<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr); 
+    *scores_ptr = __hetero_hdc_div<K, hvtype>(*scores_ptr, *norms_ptr);
+    *scores_ptr = __hetero_hdc_absolute_value<K, hvtype>(*scores_ptr);
+    //__hypervector__<K, hvtype> score =  __hetero_hdc_cossim<K, D, hvtype>(*encoded_hv_ptr, *classes_ptr);
+    //*scores_ptr = score;
 #endif
     #endif
 
