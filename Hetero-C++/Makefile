@@ -110,7 +110,7 @@ host-gpu: build/output.gpu.ll
 
 # Clang Frontend to IR
 build/host.gpu.ll: src/host.cpp
-	$(HPVM_BIN)/clang++ -O0 -Xclang -disable-O0-optnone -DHPVM -DDEVICE=hpvm::GPU_TARGET $(CFLAGS) $(INCLUDES) -S -emit-llvm $^ -o $@ 
+	$(HPVM_BIN)/clang++ -O0 -Xclang -disable-O0-optnone -DHPVM -DDEVICE=hpvm::CPU_TARGET $(CFLAGS) $(INCLUDES) -S -emit-llvm $^ -o $@ 
 #$HPVM_BIN/clang++ -O1 -I$OPENCL_PATH/include/CL -L$OPENCL_LIB_PATH -I$HPVM_ROOT/projects/hetero-c++/test/include/ -lm -lrt -pthread -lOpenCL  $INCLUDE_FLAG -fenable-matrix    $PREFIX.cpp -S -emit-llvm -o $PREFIX.ll
 
 # GenHPVM for HDC only and mem2reg
@@ -133,7 +133,7 @@ build/hpvm.gpu.ll: build/hpvmc.gpu.ll
 
 build/hpvmcompiled.gpu.ll: build/hpvm.gpu.ll
 	$(HPVM_BIN)/opt -enable-new-pm=0 -load $(HPVM_LIB)/HPVMBuildDFG.so -load $(HPVM_LIB)/HPVMLocalMem.so -load $(HPVM_LIB)/HPVMDFG2LLVM_GPU_OCL.so -load $(HPVM_LIB)/HPVMDFG2LLVM_CPU.so -load $(HPVM_LIB)/HPVMClearDFG.so -load $(HPVM_LIB)/HPVMDFGTransformPasses.so -localmem -dfg2llvm-gpu-ocl -dfg2llvm-cpu -clearDFG -hpvm-timers-cpu -hpvm-timers-ptx $< -S -o $@
-	#$(HPVM_BIN)/llvm-ocl build/hpvm.gpu.kernels.ll
+	$(HPVM_BIN)/llvm-ocl build/hpvm.gpu.kernels.ll
 
 HPVM_RT := $(HPVM_BUILD_DIR)/tools/hpvm/projects/hpvm-rt/hpvm-rt.bc
 
