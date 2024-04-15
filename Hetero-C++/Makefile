@@ -201,9 +201,9 @@ build/host.cublas.o: build/hdc.lowered.cublas.ll
 	$(HPVM_BIN)/clang -fPIC -c -Ofast -march=native $< -o $@
 
 build/hdc_cuda_rt.o: $(HPVM_INSTALL_DIR)/projects/hpvm-hdc/cuda-impl/hdc_cuda_rt.cu
-	$(NVCC) -c -O2 $^ -o $@ 
+	$(NVCC) -g -c -O2 $^ -o $@ 
 build/hdc_kernels.o: $(HPVM_INSTALL_DIR)/projects/hpvm-hdc/cuda-impl/hdc_kernels.cu
-	$(NVCC) -c -O2 $^ -o $@ 
+	$(NVCC) -g -c -O2 $^ -o $@ 
 
 .PHONY: clean
 
