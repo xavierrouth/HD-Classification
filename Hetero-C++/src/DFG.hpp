@@ -319,7 +319,7 @@ void encoding_and_inference_node( /* Input buffers: 3*/  __hypermatrix__<D, N_FE
     // Re-encode each iteration.
     void* encoding_task = __hetero_task_begin( /* Input Buffers: 3 */ 3, rp_matrix_ptr, rp_matrix_size, datapoint_vec_ptr, datapoint_vec_size,  encoded_hv_ptr, encoded_hv_size, /* Output Buffers: 1 */ 1, encoded_hv_ptr, encoded_hv_size, "inference_encoding_task"   );
 #endif
-    rp_encoding_node<D, N_FEATURES, 2>(rp_matrix_ptr, rp_matrix_size, datapoint_vec_ptr, datapoint_vec_size, encoded_hv_ptr, encoded_hv_size);
+     rp_encoding_node<D, N_FEATURES, 2>(rp_matrix_ptr, rp_matrix_size, datapoint_vec_ptr, datapoint_vec_size, encoded_hv_ptr, encoded_hv_size);
 
 #ifndef NODFG
     __hetero_task_end(encoding_task);
@@ -356,4 +356,62 @@ void inference_root_node( /* Input buffers: 3*/  __hypermatrix__<D, N_FEATURES, 
 
     __hetero_section_end(root_section);
 #endif
+}
+
+
+
+
+
+
+
+
+template<int NC, int NS , int D>
+void InitialUpdateDFG(__hypervector__<D, hvtype>* encoded_hv_ptr, size_t encoded_hv_size, __hypermatrix__<NC ,D, hvtype>* class_hm_ptr, size_t class_hm_size, int label, int idx) {
+    
+#ifndef NODFG
+    void* section = __hetero_section_begin();
+
+    void* task = __hetero_task_begin(
+            4, encoded_hv_ptr, encoded_hv_size, class_hm_ptr, class_hm_size, label, idx, 
+            1, class_hm_ptr, class_hm_size,
+            "InitNode"
+            );
+#endif
+
+		auto class_hv = __hetero_hdc_get_matrix_row<NC, D, hvtype>(*class_hm_ptr, NC, D, label);
+		//auto encoded_hv = __hetero_hdc_get_matrix_row<NS, D, hvtype>(*encoded_hv_ptr, NS, D, idx);
+		auto sum_hv = __hetero_hdc_sum<D, hvtype>(class_hv, *encoded_hv_ptr); 
+		__hetero_hdc_set_matrix_row<NC, D, hvtype>(*class_hm_ptr, sum_hv, label); 
+
+
+#ifndef NODFG
+    __hetero_task_end(task); 
+
+    __hetero_section_end(section);
+#endif
+    return;
+}
+
+
+template<int N_CLASS, int Dhv> 
+void L2NormDFG(__hypervector__<N_CLASS, hvtype> *norms_buffer, size_t norms_size,  __hypermatrix__<N_CLASS, Dhv, hvtype> *classes, size_t classes_size) {
+
+    
+#ifndef NODFG
+    void* section = __hetero_section_begin();
+
+    void* task = __hetero_task_begin(
+            2, norms_buffer, norms_size, classes, classes_size,
+            1, norms_buffer, norms_size,
+            "norm_node"
+            );
+#endif
+
+	*norms_buffer = __hetero_hdc_l2norm<N_CLASS, Dhv, hvtype>(*classes);
+#ifndef NODFG
+    __hetero_task_end(task); 
+    __hetero_section_end(section);
+#endif
+    return;
+
 }

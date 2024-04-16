@@ -129,6 +129,7 @@ int main(int argc, char** argv) {
 	long mSec1 = mSec;
 	std::cout << "Reading data took " << mSec << " mSec" << std::endl;
 
+
 	t_start = std::chrono::high_resolution_clock::now();
 
         __hypermatrix__<N_SAMPLE, N_FEAT_PAD, hvtype> training_input_vectors = __hetero_hdc_create_hypermatrix<N_SAMPLE, N_FEAT_PAD, hvtype>(1, (void*) copy<hvtype>, training_input_vectors_cpu);
@@ -163,7 +164,45 @@ int main(int argc, char** argv) {
 	return 0;
 }
 void __attribute__ ((noinline)) l2norm(__hypervector__<N_CLASS, hvtype> *norms_buffer, __hypermatrix__<N_CLASS, Dhv, hvtype> *classes) {
+#ifdef NODFG
 	*norms_buffer = __hetero_hdc_l2norm<N_CLASS, Dhv, hvtype>(*classes);
+#else
+
+        void* InitDAG = __hetero_launch(
+                (void*) L2NormDFG<N_CLASS, Dhv>, 
+                2,
+                norms_buffer,
+                sizeof(hvtype) * N_CLASS,
+                classes,
+                sizeof(hvtype) * N_CLASS * Dhv,
+                1,
+                norms_buffer,
+                sizeof(hvtype) * N_CLASS
+                );
+
+        __hetero_wait(InitDAG);
+
+#endif
+}
+
+
+void __attribute__ ((noinline)) InitializeClasses(__hypervector__<Dhv, hvtype> *encoded_hvs, __hypermatrix__<N_CLASS, Dhv, hvtype> *classes, int label ,int index) {
+#ifdef NODFG
+#else
+
+
+        void* InitDAG = __hetero_launch(
+                (void*) InitialUpdateDFG< N_CLASS, N_SAMPLE, Dhv>, 4, /* Input Buffers: 4*/ 
+                encoded_hvs, sizeof(hvtype) * Dhv, 
+                classes, sizeof(hvtype) * (N_CLASS * Dhv), 
+                label, index,
+                1, /* Output Buffers */ 
+                classes, sizeof(hvtype) * (N_CLASS * Dhv)
+                );
+
+        __hetero_wait(InitDAG);
+
+#endif
 }
 
 extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, hvtype>* rp_matrix_buffer, __hypermatrix__<N_SAMPLE, N_FEAT_PAD, hvtype>* training_input_vectors, __hypermatrix__<N_TEST, N_FEAT_PAD, hvtype>* inference_input_vectors, int* training_labels, int* y_test) {
@@ -184,25 +223,39 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 
 	__hypervector__<Dhv, hvtype> update_hv = __hetero_hdc_create_hypervector<Dhv, hvtype>(0, (void*) zero<hvtype>);
 	__hypermatrix__<N_CLASS, Dhv, hvtype> classes = __hetero_hdc_create_hypermatrix<N_CLASS, Dhv, hvtype>(0, (void*) zero<hvtype>);
+    auto classes_handle =__hetero_hdc_get_handle(classes);
 
 	__hypermatrix__<N_SAMPLE, Dhv, hvtype> encoded_hvs = __hetero_hdc_create_hypermatrix<N_SAMPLE, Dhv, hvtype>(0, (void*) zero<hvtype>);
+    auto encoded_hvs_handle = __hetero_hdc_get_handle(encoded_hvs);
+
 	__hypervector__<Dhv, hvtype> encoded_hv_buffer = __hetero_hdc_create_hypervector<Dhv, hvtype>(0, (void*) zero<hvtype>);
 	__hypervector__<N_CLASS, hvtype> scores_buffer = __hetero_hdc_create_hypervector<N_CLASS, hvtype>(0, (void*) zero<hvtype>);
 	__hypervector__<N_CLASS, hvtype> norms_buffer = __hetero_hdc_create_hypervector<N_CLASS, hvtype>(0, (void*) zero<hvtype>);
 
 	int inference_labels[N_TEST];
+    std::cout << "Starting encoding...\n";
 
 	// ============ Training ===============
 
 	// Initialize class hvs.
-	__hetero_hdc_encoding_loop(0, (void*) InitialEncodingDFG<Dhv, N_FEAT>, N_SAMPLE, N_CLASS, N_FEAT, N_FEAT_PAD, rp_matrix_buffer, rp_matrix_size, (hvtype *) training_input_vectors, input_vector_size, __hetero_hdc_get_handle(encoded_hvs), class_size);
+	__hetero_hdc_encoding_loop(0, (void*) InitialEncodingDFG<Dhv, N_FEAT>, N_SAMPLE, N_CLASS, N_FEAT, N_FEAT_PAD, rp_matrix_buffer, rp_matrix_size, (hvtype *) training_input_vectors, input_vector_size, encoded_hvs_handle, class_size);
+
+    std::cout << "Starting initialization...\n";
 
 	for (int i = 0; i < N_SAMPLE; i++) {
 		int label = training_labels[i];
+#ifndef NODFG
+		auto encoded_hv = __hetero_hdc_get_matrix_row<N_SAMPLE, Dhv, hvtype>(encoded_hvs, N_SAMPLE, Dhv, i);
+
+        auto encoded_hv_i_handle = __hetero_hdc_get_handle(encoded_hv);
+        InitializeClasses(encoded_hv_i_handle, classes_handle, label, i);
+
+#else
 		auto class_hv = __hetero_hdc_get_matrix_row<N_CLASS, Dhv, hvtype>(classes, N_CLASS, Dhv, label);
 		auto encoded_hv = __hetero_hdc_get_matrix_row<N_SAMPLE, Dhv, hvtype>(encoded_hvs, N_SAMPLE, Dhv, i);
 		auto sum_hv = __hetero_hdc_sum<Dhv, hvtype>(class_hv, encoded_hv); 
 		__hetero_hdc_set_matrix_row<N_CLASS, Dhv, hvtype>(classes, sum_hv, label); 
+#endif
 	}
 
 	//cu_rt_dump_float_hm(__hetero_hdc_get_handle(classes), N_CLASS, Dhv, "classes" POSTFIX);
