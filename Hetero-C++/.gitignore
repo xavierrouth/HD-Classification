@@ -1,6 +1,7 @@
-host-normal
-host-cpu
-host-fpga
+host-*
 *.aoco
 *.temp
 dump*
+out.*
+build/*.ll
+build/*.o
