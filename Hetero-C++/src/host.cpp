@@ -76,14 +76,12 @@ int main(int argc, char** argv) {
 #endif
 
 	auto t_start = std::chrono::high_resolution_clock::now();
-	std::cout << "Main Starting" << std::endl;
 
 	srand(time(NULL));
 
 	int EPOCH = std::atoi(argv[1]);
    
 #ifdef QUANT
-    std::cout << "Quantized Dataset!\n" << "\n";
 	std::vector<int> X_train; // X data. 
 	std::vector<int> y_train; // LABELS
 	
@@ -96,7 +94,6 @@ int main(int argc, char** argv) {
 	datasetRead(X_test, X_test_path);
 	datasetRead(y_test, y_test_path);
 #else
-    std::cout << "Non Quantized Dataset!\n" << std::endl;
 	std::vector<float> X_train; // X data. 
 	std::vector<int> y_train; // LABELS
 	
@@ -204,7 +201,6 @@ int main(int argc, char** argv) {
 	auto t_elapsed = std::chrono::high_resolution_clock::now() - t_start;
 	long mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_elapsed).count();
 	long mSec1 = mSec;
-	std::cout << "Reading data took " << mSec << " mSec" << std::endl;
 
 	t_start = std::chrono::high_resolution_clock::now();
 
@@ -226,10 +222,6 @@ int main(int argc, char** argv) {
     gen_rp_matrix<Dhv, N_FEAT>(__hetero_hdc_get_handle(rp_seed), sizeof(hvtype) * Dhv, __hetero_hdc_get_handle(shifted_buffer), sizeof(hvtype) * (N_FEAT * Dhv), __hetero_hdc_get_handle(rp_matrix_buffer), sizeof(hvtype) * (N_FEAT * Dhv));
 #endif
 
-	std::cout << "dumping pointers" << std::endl;
-	std::cout << "training: " << __hetero_hdc_get_handle(training_input_vectors) << std::endl;
-	std::cout << "inference: " << __hetero_hdc_get_handle(inference_input_vectors) << std::endl;
-
 	float test_accuracy = run_hd_classification(EPOCH, 
 		__hetero_hdc_get_handle(rp_matrix_buffer), 
 		__hetero_hdc_get_handle(training_input_vectors),
@@ -240,8 +232,8 @@ int main(int argc, char** argv) {
 	t_elapsed = std::chrono::high_resolution_clock::now() - t_start;
 	mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_elapsed).count();
 
-	std::cout << "Overall Benchmark took " << mSec << " mSec" << std::endl;
-	std::cout << "Test accuracy = " << test_accuracy << std::endl;
+	std::cout << "Overall benchmark took " << mSec << " mSec" << std::endl;
+	std::cout << "Test Accuracy: " << test_accuracy << std::endl;
 
 #ifndef NODFG
 	__hpvm__cleanup();
@@ -291,8 +283,6 @@ void __attribute__ ((noinline)) InitializeClasses(__hypervector__<Dhv, hvtype> *
 }
 
 extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, hvtype>* rp_matrix_buffer, __hypermatrix__<N_SAMPLE, N_FEAT, hvtype>* training_input_vectors, __hypermatrix__<N_TEST, N_FEAT, hvtype>* inference_input_vectors, int* training_labels, int* y_test) {
-	std::cout << "running  hd clasification" << std::endl;
-	
 	size_t rp_matrix_size = N_FEAT * Dhv * sizeof(hvtype);
 	size_t input_vector_size = N_FEAT * sizeof(hvtype);
 	size_t class_size = Dhv * sizeof(hvtype);
@@ -320,7 +310,6 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 	__hypervector__<N_CLASS, hvtype> norms_buffer = __hetero_hdc_create_hypervector<N_CLASS, hvtype>(0, (void*) zero<hvtype>);
 
 	int inference_labels[N_TEST];
-    std::cout << "Starting encoding..." << std::endl;
 
 	// ============ Training ===============
 
@@ -328,8 +317,6 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 	// No need to do encoding if using simulator. 
 	if (0) {
 	__hetero_hdc_encoding_loop(0, (void*) InitialEncodingDFG<Dhv, N_FEAT>, N_SAMPLE, N_CLASS, N_FEAT, N_FEAT, rp_matrix_buffer, rp_matrix_size, (hvtype *) training_input_vectors, input_vector_size, encoded_hvs_handle, class_size);
-
-    std::cout << "Starting initialization..." << std::endl;
 
 	// Set classes as sum of all 
 	for (int i = 0; i < N_SAMPLE; i++) {
@@ -355,7 +342,6 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 	// ======= Training Rest Epochs ======= 
 
 	{
-	std::cout << "Begin Training\n";
 	auto t_start = std::chrono::high_resolution_clock::now();
 
 	// l2norm(__hetero_hdc_get_handle(norms_buffer), __hetero_hdc_get_handle(classes));
@@ -373,7 +359,6 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 
 	auto t_end = std::chrono::high_resolution_clock::now();
 	long mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_end-t_start).count();
-	std::cout << "Training: " << mSec << " mSec\n";
 	}
 	//cu_rt_dump_float_hm(__hetero_hdc_get_handle(classes), N_CLASS, Dhv, "post_train_classes" POSTFIX);
 	//cu_rt_dump_float_hv(__hetero_hdc_get_handle(scores_buffer), N_CLASS, "post_train_scores_buffer" POSTFIX);
@@ -382,7 +367,6 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 	// ============ Inference =============== //
 
 	{
-	std::cout << "Begin Inference\n";
 	auto t_start = std::chrono::high_resolution_clock::now();
 
 	// l2norm(__hetero_hdc_get_handle(norms_buffer), __hetero_hdc_get_handle(classes));
@@ -399,7 +383,6 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 
 	auto t_end = std::chrono::high_resolution_clock::now();
 	long mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_end-t_start).count();
-	std::cout << "Inference: " << mSec << " mSec\n";
 	}
 	//cu_rt_dump_float_hm(__hetero_hdc_get_handle(classes), N_CLASS, Dhv, "post_infer_classes" POSTFIX);
 	//cu_rt_dump_float_hv(__hetero_hdc_get_handle(scores_buffer), N_CLASS, "post_infer_scores_buffer" POSTFIX);

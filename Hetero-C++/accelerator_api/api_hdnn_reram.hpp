@@ -2,6 +2,7 @@
 // into the simulation executable.
 //#define DEBUG 1
 
+#include <time.h>
 #include <cstring>
 #include <random>
 #include <algorithm>
@@ -44,6 +45,7 @@ private:
 
   float *enc_mat_1; // Encoding weight matrix with shape (f1, d1)
   float *enc_mat_2; // Encoding weight matrix with shape (f2, d2)
+  float *enc_mat_2_T; // Encoding weight matrix with shape (d2, f2)
   uint32_t f1, d1, f2, d2;//?? encoding matrix related
 
   void dim_prime_fact();
@@ -66,6 +68,10 @@ public:
   int16_t *feature_mem = nullptr;
   int16_t *class_mem = nullptr;
   int16_t *score_mem = nullptr;
+
+  int16_t *ptr_dst = nullptr;
+  int16_t *packed_dst = nullptr;
+  float *tmp = nullptr;
 
   sim_hdnn_reram(uint32_t dim_f, uint32_t dim_d, uint32_t num_c,uint32_t mlc_level,bool reference_m);
   ~sim_hdnn_reram();
@@ -119,6 +125,9 @@ sim_hdnn_reram::sim_hdnn_reram(uint32_t dim_f, uint32_t dim_d, uint32_t num_c,ui
 #ifdef DEBUG
   printf("f1=%d\tf2=%d\td1=%d\td2=%d\n", f1, f2, d1, d2);
 #endif
+  ptr_dst = new int16_t[dim_hv];
+  packed_dst=new int16_t[dim_hv/pcm_mlc_level];
+  tmp = new float[f2 * d1];
 }
 
 sim_hdnn_reram::~sim_hdnn_reram() {
@@ -128,6 +137,8 @@ sim_hdnn_reram::~sim_hdnn_reram() {
 
   if (enc_mat_2)
     delete[] enc_mat_2;
+  if (enc_mat_2_T)
+    delete[] enc_mat_2_T;
 
   if (reram_array)
     delete[] reram_array;
@@ -140,6 +151,10 @@ sim_hdnn_reram::~sim_hdnn_reram() {
 
   if (score_mem)
     delete[] score_mem;
+
+  delete[] ptr_dst;
+  delete[] packed_dst;
+  delete[] tmp;
 }
 
 void sim_hdnn_reram::allocate_base_mem(int16_t *BasePtr, size_t NumBytes) {
@@ -204,6 +219,12 @@ void sim_hdnn_reram::init_enc_mat() {
       enc_mat_2[i * d2 + j] = rnd * 2.0 - 1;
     }
   }
+  enc_mat_2_T = new float[f2 * d2];
+  for (int j = 0; j < d2; j++) {
+    for (int i = 0; i < f2; i++) {
+      enc_mat_2_T[j * f2 + i] = enc_mat_2[i * d2 + j];
+    }
+  }
 }
 
 void sim_hdnn_reram::init_buffer() {
@@ -224,18 +245,34 @@ void sim_hdnn_reram::init_reram_array() {
 }
 
 void sim_hdnn_reram::enc_kronecker(int16_t *dst_ptr, int16_t *inp_feature) {
-  float *tmp = new float[f2 * d1];
-
   // Kronecker 1 encoding (f2,f1) x (f1,d1) -> (f2,d1)
-  for (int i = 0; i < f2; i++) {
-    for (int j = 0; j < d1; j++) {
-      tmp[i * d1 + j] = 0.0;
-      for (int k = 0; k < f1; k++) {
-        tmp[i * d1 + j] += inp_feature[i * f1 + k] * enc_mat_1[k * d1 + j];
-        // printf("tmp @ %d, %d, %d = %f x %f = %f\n", i, j, k, inp_feature[i *
-        // f1 + k], enc_mat_1[k * d1 + j], tmp[i * d1 + j]);
+  //for (int i = 0; i < f2; i++) {
+  //  for (int j = 0; j < d1; j++) {
+  //    tmp[i * d1 + j] = 0.0;
+  //    for (int k = 0; k < f1; k++) {
+  //      tmp[i * d1 + j] += inp_feature[i * f1 + k] * enc_mat_1[k * d1 + j];
+  //    }
+  //  }
+  //}
+  const int T = 32;
+  for (int ti = 0; ti < f2; ti += T) {
+    for (int tj = 0; tj < d1; tj += T) {
+      for (int tk = 0; tk < f1; tk += T) {
+        for (int i = ti; i < ti + T && i < f2; ++i) {
+          for (int j = tj; j < tj + T && j < d1; ++j) {
+            tmp[j * f2 + i] = 0;
+          }
+        }
+        for (int i = ti; i < ti + T && i < f2; ++i) {
+          for (int j = tj; j < tj + T && j < d1; ++j) {
+            float acc = 0.0f;
+            for (int k = tk; k < tk + T && k < f1; ++k) {
+              acc += inp_feature[i * f1 + k] * enc_mat_1[k * d1 + j];
+            }
+            tmp[j * f2 + i] += acc;
+          }
+        }
       }
-      // printf("tmp @ %d, %d = %f\n", i, j, tmp[i * d1 + j]);
     }
   }
 
@@ -244,14 +281,36 @@ void sim_hdnn_reram::enc_kronecker(int16_t *dst_ptr, int16_t *inp_feature) {
     for (int j = 0; j < d2; j++) {
       float t = 0.0;
       for (int k = 0; k < f2; k++) {
-        t += tmp[k * d1 + i] * enc_mat_2[k * d2 + j];
+        t += tmp[i * f2 + k] * enc_mat_2_T[j * f2 + k];
       }
       dst_ptr[i * d2 + j] = t >= 0 ? 1 : -1; // Binarized encoded results
     }
   }
-
-  if (tmp)
-    delete[] tmp;
+  //for (int ti = 0; ti < d1; ti += T) {
+  //  for (int tj = 0; tj < d2; tj += T) {
+  //    for (int tk = 0; tk < f2; tk += T) {
+  //      for (int i = ti; i < ti + T && i < d1; ++i) {
+  //        for (int j = tj; j < tj + T && j < d2; ++j) {
+  //          dst_ptr[i * d2 + j] = 0;
+  //        }
+  //      }
+  //      for (int i = ti; i < ti + T && i < d1; ++i) {
+  //        for (int j = tj; j < tj + T && j < d2; ++j) {
+  //          float acc = 0.0f;
+  //          for (int k = tk; k < tk + T && k < f2; ++k) {
+  //            acc += tmp[i * f2 + k] * enc_mat_2_T[j * f2 + k];
+  //          }
+  //          dst_ptr[i * d2 + j] += acc; // Binarized encoded results
+  //        }
+  //      }
+  //      for (int i = ti; i < ti + T && i < d1; ++i) {
+  //        for (int j = tj; j < tj + T && j < d2; ++j) {
+  //          dst_ptr[i * d2 + j] = dst_ptr[i * d2 + j] >= 0 ? 1 : -1;
+  //        }
+  //      }
+  //    }
+  //  }
+  //}
 }
 
 

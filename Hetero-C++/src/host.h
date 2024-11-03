@@ -13,7 +13,7 @@
 
 #define N_FEAT	        617  //  28 * 28  //feature per input (e.g., isolet: 617)
 #define N_CLASS		    26 // 10	//number of classes. (e.g., isolet: 26, ucihar 12)
-#define Dhv				8192 //hypervectors length
+#define Dhv				3072 //hypervectors length
 #define N_SAMPLE 		6238 // 60000 // FIXME: Make these parametesr variable. 
 
 #define N_TEST 			1559 // 10000  // Needs to be constant for templated funciton. 

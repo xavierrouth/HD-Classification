@@ -1,4 +1,5 @@
-
+#include <stdio.h>
+#include <time.h>
 #include "api_hdnn_reram.hpp"
 #include <stdlib.h>
 sim_hdnn_reram *ins_hdnn_reram = nullptr;
@@ -80,22 +81,20 @@ void execute_train(int label,int write_verify_cycle) {
   uint32_t num_class = ins_hdnn_reram->num_class;
   uint32_t dim_hv_packed=dim_hv/ins_hdnn_reram->pcm_mlc_level;
   // Compute aggregate class HVs
-  int16_t *ptr_dst = new int16_t[dim_hv];
-  int16_t *ptr_dst_packet=new int16_t[dim_hv_packed];
-  encode_hypervector(ptr_dst, ins_hdnn_reram->feature_mem, dim_feature, dim_hv);
+  encode_hypervector(ins_hdnn_reram->ptr_dst, ins_hdnn_reram->feature_mem, dim_feature, dim_hv);
 
 //dimension packing
   if (ins_hdnn_reram->pcm_mlc_level>1)
   {
-    dimension_packing(ptr_dst,ptr_dst_packet);
+    dimension_packing(ins_hdnn_reram->ptr_dst,ins_hdnn_reram->packed_dst);
   }
   else
   {
-    std::memcpy(ptr_dst_packet,ptr_dst,dim_hv*sizeof(int16_t));
+    std::memcpy(ins_hdnn_reram->packed_dst,ins_hdnn_reram->ptr_dst,dim_hv*sizeof(int16_t));
   }
 
   for (int j = 0; j < dim_hv_packed; j++) {
-    ins_hdnn_reram->class_mem[label * dim_hv_packed + j] += ptr_dst_packet[j];
+    ins_hdnn_reram->class_mem[label * dim_hv_packed + j] += ins_hdnn_reram->packed_dst[j];
   }
 
 
@@ -105,9 +104,6 @@ void execute_train(int label,int write_verify_cycle) {
     ins_hdnn_reram->program_reram_bit_mlc(
         ins_hdnn_reram->class_mem[label * dim_hv_packed + i], label, i,write_verify_cycle);
   }
-
-  delete[] ptr_dst;
-  delete[] ptr_dst_packet;
 }
 
 int execute_inference() {
@@ -118,24 +114,20 @@ int execute_inference() {
 
   uint32_t correct = 0;
   // Compute encoded query
-  int16_t *ptr_dst = new int16_t[dim_hv];
-  int16_t *packed_dst=new int16_t[dim_hv_packed];
-  encode_hypervector(ptr_dst, ins_hdnn_reram->feature_mem, dim_feature, dim_hv);
+  encode_hypervector(ins_hdnn_reram->ptr_dst, ins_hdnn_reram->feature_mem, dim_feature, dim_hv);
 
   if (ins_hdnn_reram->pcm_mlc_level>1)
   {
-    dimension_packing(ptr_dst,packed_dst);
+    dimension_packing(ins_hdnn_reram->ptr_dst,ins_hdnn_reram->packed_dst);
   }
   else
   {
-    std::memcpy(packed_dst,ptr_dst,dim_hv*sizeof(int16_t));
+    std::memcpy(ins_hdnn_reram->packed_dst,ins_hdnn_reram->ptr_dst,dim_hv*sizeof(int16_t));
   }
   
 
   // Hamming distance
-  hamming_distance(ins_hdnn_reram->score_mem, packed_dst, false);
-  delete[] ptr_dst;
-  delete[] packed_dst;
+  hamming_distance(ins_hdnn_reram->score_mem, ins_hdnn_reram->packed_dst, false);
 
 
   int16_t *ptr_hamming_score = ins_hdnn_reram->score_mem;
@@ -152,22 +144,19 @@ void execute_retrain(int label,int write_verify_cycle) {
   uint32_t dim_hv_packed=dim_hv/ins_hdnn_reram->pcm_mlc_level;
 
   // Encode features
-  int16_t *ptr_dst = new int16_t[dim_hv];
-  int16_t *packed_dst = new int16_t[dim_hv_packed];
-
-  encode_hypervector(ptr_dst, ins_hdnn_reram->feature_mem, dim_feature, dim_hv);
+  encode_hypervector(ins_hdnn_reram->ptr_dst, ins_hdnn_reram->feature_mem, dim_feature, dim_hv);
 
   if (ins_hdnn_reram->pcm_mlc_level>1)
   {
-    dimension_packing(ptr_dst,packed_dst);
+    dimension_packing(ins_hdnn_reram->ptr_dst,ins_hdnn_reram->packed_dst);
   }
   else
   {
-    std::memcpy(packed_dst,ptr_dst,dim_hv*sizeof(int16_t));
+    std::memcpy(ins_hdnn_reram->packed_dst,ins_hdnn_reram->ptr_dst,dim_hv*sizeof(int16_t));
   }
 
   // Hamming distance
-  hamming_distance(ins_hdnn_reram->score_mem, packed_dst, false);
+  hamming_distance(ins_hdnn_reram->score_mem, ins_hdnn_reram->packed_dst, false);
 
   int pred =
       std::distance(ins_hdnn_reram->score_mem,
@@ -176,8 +165,8 @@ void execute_retrain(int label,int write_verify_cycle) {
 
   if (pred != label) {
     for (int j = 0; j < dim_hv_packed; j++) {
-      ins_hdnn_reram->class_mem[label * dim_hv_packed + j] += packed_dst[j];
-      ins_hdnn_reram->class_mem[pred * dim_hv_packed + j] -= packed_dst[j];
+      ins_hdnn_reram->class_mem[label * dim_hv_packed + j] += ins_hdnn_reram->packed_dst[j];
+      ins_hdnn_reram->class_mem[pred * dim_hv_packed + j] -= ins_hdnn_reram->packed_dst[j];
     }
   }
 
@@ -186,9 +175,5 @@ void execute_retrain(int label,int write_verify_cycle) {
     ins_hdnn_reram->program_reram_bit_mlc(
         ins_hdnn_reram->class_mem[label * dim_hv_packed + i], label, i,write_verify_cycle);
   }
-
-  delete[] ptr_dst;
-  delete[] packed_dst;
-
 }
 }
