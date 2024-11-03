@@ -58,11 +58,17 @@ T copy(T* vec, size_t loop_index_var) {
 }
 
 template <typename T>
+T copy_no_padding(T* vec, size_t loop_index_var) {
+	// The given data vectors are strided by N_FEAT_PAD elements, even though the vectors are each N_FEAT elements in length.
+    return vec[loop_index_var + (N_FEAT_PAD - N_FEAT) * (loop_index_var / N_FEAT)];
+}
+
+template <typename T>
 T zero(size_t loop_index_var) {
 	return 0;
 }
 
-extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, hvtype>* rp_matrix_buffer, __hypermatrix__<N_SAMPLE, N_FEAT_PAD, hvtype>* training_input_vectors, __hypermatrix__<N_TEST, N_FEAT_PAD, hvtype>* inference_input_vectors, int* training_labels, int* y_test);
+extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, hvtype>* rp_matrix_buffer, __hypermatrix__<N_SAMPLE, N_FEAT, hvtype>* training_input_vectors, __hypermatrix__<N_TEST, N_FEAT, hvtype>* inference_input_vectors, int* training_labels, int* y_test);
 
 int main(int argc, char** argv) {
 #ifndef NODFG
@@ -128,7 +134,6 @@ int main(int argc, char** argv) {
 	size_t inference_input_size = training_vec.size() * sizeof(int16_t);
 
 	int16_t* training_input_vectors_cpu = training_vec.data();
-    size_t training_input_size = training_vec.size() * sizeof(int16_t);
 
 	// N_FEAT is number of entries per vector
 	size_t input_vector_size = N_FEAT * sizeof(int16_t); // Size of a single vector
@@ -176,7 +181,6 @@ int main(int argc, char** argv) {
 	
 	std::vector<hvtype> temp_vec(X_train.begin(), X_train.end());
 	hvtype* training_input_vectors_cpu = temp_vec.data();
-    size_t training_input_size = temp_vec.size() * sizeof(hvtype);
 
 	// N_FEAT is number of entries per vector
 	size_t input_vector_size = N_FEAT * sizeof(hvtype); // Size of a single vector
@@ -188,7 +192,7 @@ int main(int argc, char** argv) {
 	// INFERENCE DATA / TEST DATA
 	//int inference_test_labels[N_TEST];
 	size_t inference_labels_size = N_TEST * sizeof(int);
-				int* inference_test_labels = y_test.data();
+	int* inference_test_labels = y_test.data();
 
 
 	std::vector<hvtype> temp_vec2(X_test.begin(), X_test.end());
@@ -197,7 +201,6 @@ int main(int argc, char** argv) {
 
 #endif
 
-	// N_FEAT is number of entries per vector
 	auto t_elapsed = std::chrono::high_resolution_clock::now() - t_start;
 	long mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_elapsed).count();
 	long mSec1 = mSec;
@@ -205,8 +208,8 @@ int main(int argc, char** argv) {
 
 	t_start = std::chrono::high_resolution_clock::now();
 
-	__hypermatrix__<N_SAMPLE, N_FEAT_PAD, hvtype> training_input_vectors = __hetero_hdc_create_hypermatrix<N_SAMPLE, N_FEAT_PAD, hvtype>(1, (void*) copy<hvtype>, training_input_vectors_cpu);
-	__hypermatrix__<N_TEST, N_FEAT_PAD, hvtype> inference_input_vectors = __hetero_hdc_create_hypermatrix<N_TEST, N_FEAT_PAD, hvtype>(1, (void*) copy<hvtype>, inference_input_vectors_cpu);
+	__hypermatrix__<N_SAMPLE, N_FEAT, hvtype> training_input_vectors = __hetero_hdc_create_hypermatrix<N_SAMPLE, N_FEAT, hvtype>(1, (void*) copy_no_padding<hvtype>, training_input_vectors_cpu);
+	__hypermatrix__<N_TEST, N_FEAT, hvtype> inference_input_vectors = __hetero_hdc_create_hypermatrix<N_TEST, N_FEAT, hvtype>(1, (void*) copy_no_padding<hvtype>, inference_input_vectors_cpu);
 
 	// Encoding matrix: First we write into rp_matrix_transpose, then transpose it to get rp_matrix,
 	// which is the correct dimensions for encoding input features.
@@ -287,7 +290,7 @@ void __attribute__ ((noinline)) InitializeClasses(__hypervector__<Dhv, hvtype> *
 #endif
 }
 
-extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, hvtype>* rp_matrix_buffer, __hypermatrix__<N_SAMPLE, N_FEAT_PAD, hvtype>* training_input_vectors, __hypermatrix__<N_TEST, N_FEAT_PAD, hvtype>* inference_input_vectors, int* training_labels, int* y_test) {
+extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, hvtype>* rp_matrix_buffer, __hypermatrix__<N_SAMPLE, N_FEAT, hvtype>* training_input_vectors, __hypermatrix__<N_TEST, N_FEAT, hvtype>* inference_input_vectors, int* training_labels, int* y_test) {
 	std::cout << "running  hd clasification" << std::endl;
 	
 	size_t rp_matrix_size = N_FEAT * Dhv * sizeof(hvtype);
@@ -324,7 +327,7 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 	// Initialize class hvs.
 	// No need to do encoding if using simulator. 
 	if (0) {
-	__hetero_hdc_encoding_loop(0, (void*) InitialEncodingDFG<Dhv, N_FEAT>, N_SAMPLE, N_CLASS, N_FEAT, N_FEAT_PAD, rp_matrix_buffer, rp_matrix_size, (hvtype *) training_input_vectors, input_vector_size, encoded_hvs_handle, class_size);
+	__hetero_hdc_encoding_loop(0, (void*) InitialEncodingDFG<Dhv, N_FEAT>, N_SAMPLE, N_CLASS, N_FEAT, N_FEAT, rp_matrix_buffer, rp_matrix_size, (hvtype *) training_input_vectors, input_vector_size, encoded_hvs_handle, class_size);
 
     std::cout << "Starting initialization..." << std::endl;
 
@@ -358,7 +361,7 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 	// l2norm(__hetero_hdc_get_handle(norms_buffer), __hetero_hdc_get_handle(classes));
 	
 	__hetero_hdc_training_loop(22, (void*) training_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>, 
-		EPOCH, N_SAMPLE, N_FEAT, N_FEAT_PAD, 
+		EPOCH, N_SAMPLE, N_FEAT, N_FEAT, 
 		rp_matrix_buffer, rp_matrix_size, 
 		(hvtype *) training_input_vectors, input_vector_size, 
 		__hetero_hdc_get_handle(classes), classes_size, 
@@ -385,7 +388,7 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 	// l2norm(__hetero_hdc_get_handle(norms_buffer), __hetero_hdc_get_handle(classes));
 	__hetero_hdc_inference_loop(17, 
 		(void*) inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>, 
-		N_TEST, N_FEAT, N_FEAT_PAD, 
+		N_TEST, N_FEAT, N_FEAT, 
 		rp_matrix_buffer, rp_matrix_size, 
 		(hvtype *) inference_input_vectors, input_vector_size, 
 		__hetero_hdc_get_handle(classes), classes_size, 
