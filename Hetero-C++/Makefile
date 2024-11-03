@@ -6,6 +6,7 @@ HPVM_LIB := $(HPVM_INSTALL_DIR)/build/lib
 HPVM_BIN := $(HPVM_INSTALL_DIR)/build/bin
 
 HPVM_DECLS_FILE := $(HPVM_BUILD_DIR)/tools/hpvm/projects/hetero-c++/lib/HPVMCFunctionDeclarations/HPVMCFunctionDeclarations.bc
+ACCELERATOR_API_PATH := /home/xrouth2/hdc/hpvm-pcm/device_interface
 
 CUDA_PATH:=/software/cuda-9.1
 OPENCL_PATH:=$(CUDA_PATH)
@@ -17,7 +18,7 @@ HDC_LIBS := -load $(HPVM_LIB)/LLVMHPVMHDC.so -load $(HPVM_LIB)/LLVMHDCBinProp.so
 
 NVCC ?= "/usr/local/cuda"/bin/nvcc
 
-O1_FLAGS = -targetlibinfo -tti -tbaa -scoped-noalias-aa -assumption-cache-tracker -profile-summary-info -forceattrs -inferattrs -ipsccp -called-value-propagation -globalopt -domtree -mem2reg -deadargelim -basic-aa -aa -loops -lazy-branch-prob -lazy-block-freq -opt-remark-emitter -instcombine -simplifycfg -basiccg -globals-aa -prune-eh -always-inline -function-attrs  -memoryssa -early-cse-memssa -speculative-execution -lazy-value-info -jump-threading -correlated-propagation -libcalls-shrinkwrap -branch-prob -block-freq -pgo-memop-opt -tailcallelim -reassociate -loop-simplify -lcssa-verification -lcssa -scalar-evolution -loop-rotate -licm -loop-unswitch -indvars -loop-idiom -loop-deletion -loop-unroll -memdep -memcpyopt -sccp -demanded-bits -bdce -dse -postdomtree -adce -barrier -rpo-function-attrs -globaldce -float2int -loop-accesses -loop-distribute -loop-vectorize -loop-load-elim -alignment-from-assumptions -strip-dead-prototypes -loop-sink -instsimplify -div-rem-pairs -verify -ee-instrument -early-cse -lower-expect
+O1_FLAGS = -targetlibinfo -dce -tti -tbaa -scoped-noalias-aa -assumption-cache-tracker -profile-summary-info -forceattrs -inferattrs -ipsccp -called-value-propagation -globalopt -domtree -mem2reg -deadargelim -basic-aa -aa -loops -lazy-branch-prob -lazy-block-freq -opt-remark-emitter -instcombine -simplifycfg -basiccg -globals-aa -prune-eh -always-inline -function-attrs  -memoryssa -early-cse-memssa -speculative-execution -lazy-value-info -jump-threading -correlated-propagation -libcalls-shrinkwrap -branch-prob -block-freq -pgo-memop-opt -tailcallelim -reassociate -loop-simplify -lcssa-verification -lcssa -scalar-evolution -loop-rotate -licm -loop-unswitch -indvars -loop-idiom -loop-deletion -loop-unroll -memdep -memcpyopt -sccp -demanded-bits -bdce -dse -postdomtree -adce -barrier -rpo-function-attrs -globaldce -float2int -loop-accesses -loop-distribute -loop-vectorize -loop-load-elim -alignment-from-assumptions -strip-dead-prototypes -loop-sink -instsimplify -div-rem-pairs -verify -ee-instrument -early-cse -lower-expect
 
 # PARAMETERS := -DHPVM -DDEVICE=hpvm::CPU_TARGET
 #
@@ -26,12 +27,13 @@ O1_FLAGS = -targetlibinfo -tti -tbaa -scoped-noalias-aa -assumption-cache-tracke
 ### ---------- SIMULATOR ---------------
 
 # Generate Executable
-host-sim: build/hdc.lowered.sim.ll accelerator_api/hpvm_interface.cpp accelerator_api/api_hdnn_reram.hpp
-	$(HPVM_INSTALL_DIR)/build/bin/clang++ -lm -lrt -g -Ofast -march=native $< accelerator_api/hpvm_interface.cpp   -o $@ 
+host-sim: build/hdc.lowered.sim.ll $(ACCELERATOR_API_PATH)/hpvm_interface.cpp $(ACCELERATOR_API_PATH)/api_hdnn_reram.hpp
+	$(HPVM_INSTALL_DIR)/build/bin/clang++ -lm -g -lrt -O1 -march=native $< $(ACCELERATOR_API_PATH)/hpvm_interface.cpp   -o $@ 
 
 # Clang Frontend to IR
 build/host.sim.ll: src/host.cpp
-	$(HPVM_BIN)/clang++ -DNODFG -DACCEL $(CFLAGS) $(INCLUDES) -S -emit-llvm $^ -o $@ 
+	$(HPVM_BIN)/clang++ -Xclang -disable-O0-optnone -DNODFG -DDEVICE=hpvm::CPU_TARGET $(CFLAGS) $(INCLUDES) -S -emit-llvm $^ -o $@ 
+# 
 
 # GenHPVM for HDC only and mem2reg
 build/hpvm.genhdc.sim.ll: build/host.sim.ll
@@ -39,14 +41,19 @@ build/hpvm.genhdc.sim.ll: build/host.sim.ll
 
 
 # Lower HDC Intrinsics
-build/hdc.lowered.sim.ll: build/hpvm.genhdc.sim.ll #hpvm. # -enable-hcc 
-	$(HPVM_BIN)/opt -enable-new-pm=0 -load $(HPVM_LIB)/LLVMHPVMHDC.so  -vector-block-dim=1 -lower-hdc -compile-sim -dce -simplifycfg $< -S -o $@ 
+build/hdc.lowered.1.sim.ll: build/hpvm.genhdc.sim.ll #hpvm. # -enable-hcc 
+	$(HPVM_BIN)/opt -enable-new-pm=0 -load $(HPVM_LIB)/LLVMHPVMHDC.so  -vector-block-dim=1 -mlc -mlc-bits=1 -write-verify-cycles=5 -lower-hdc -compile-sim -globaldce -dce -simplifycfg $< -S -o $@ 
+
+# DCE
+build/hdc.lowered.sim.ll: build/hdc.lowered.1.sim.ll #hpvm. # -enable-hcc
+	$(HPVM_BIN)/opt -enable-new-pm=0  -dce -globaldce -simplifycfg $< -S -o $@ 
+
 
 ### ---------- ACCEL ---------------
 
 # Generate Executable
-host-accel: build/hdc.lowered.accel.ll accelerator_api/hpvm_interface.cpp accelerator_api/api_hdnn_reram.hpp
-	$(HPVM_INSTALL_DIR)/build/bin/clang++ -lm -lrt -g -Ofast -march=native $< accelerator_api/hpvm_interface.cpp   -o $@ 
+host-accel: build/hdc.lowered.accel.ll $(ACCELERATOR_API_PATH)/hpvm_interface.cpp $(ACCELERATOR_API_PATH)/api_hdnn_reram.hpp
+	$(HPVM_INSTALL_DIR)/build/bin/clang++ -lm -lrt -g -Ofast -march=native $< $(ACCELERATOR_API_PATH)/hpvm_interface.cpp   -o $@ 
 
 # Clang Frontend to IR
 build/host.accel.ll: src/host.cpp

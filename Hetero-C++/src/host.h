@@ -11,13 +11,12 @@
 #include <iostream>
 #include <fstream>
 
-#define N_FEAT	        617 //feature per input (e.g., isolet: 617)
-#define N_CLASS		    26	//number of classes. (e.g., isolet: 26, ucihar 12)
-#define Dhv				2048  //hypervectors length
-#define N_SAMPLE 		6238 // FIXME: Make these parametesr variable.
+#define N_FEAT	        28 * 28  //feature per input (e.g., isolet: 617)
+#define N_CLASS		    10	//number of classes. (e.g., isolet: 26, ucihar 12)
+#define Dhv				1024 //hypervectors length
+#define N_SAMPLE 		60000 // FIXME: Make these parametesr variable.
 
-//#define N_TEST 			6238// Needs to be constant for templated funciton. 
-#define N_TEST 			1559  // Needs to be constant for templated funciton. 
+#define N_TEST 			10000  // Needs to be constant for templated funciton. 
 
 #define COL				8 //number of columns of a matrix-vector multiplication window
 #define ROW				32 //number of rows of a matrix-vector multiplication window (32, 64, 128, 256, 512)
@@ -30,9 +29,9 @@
 	#define PAD 		(COL - PAD_)
 #endif
 
-#define N_FEAT_PAD		(N_FEAT + PAD)	//feature per input (e.g., isolet: 624, ucihar 568)
+#define N_FEAT_PAD		28 * 28 //(N_FEAT + PAD)	//feature per input (e.g., isolet: 624, ucihar 568)
 
-//#define QUANT
+#define QUANT
 
 #ifdef QUANT
 // TODO: Add these to directory.

@@ -3,7 +3,7 @@
 #include <iostream>
 
 #ifndef ACCEL 
-typedef float hvtype;
+typedef int16_t hvtype;
 #else
 typedef int16_t hvtype;
 #endif
@@ -21,7 +21,10 @@ void rp_encoding_node(/* Input Buffers: 2*/ __hypermatrix__<D, N_FEATURES, hvtyp
 #ifndef NODFG
     void* section = __hetero_section_begin();
 
-    void* task = __hetero_task_begin(/* Input Buffers: 2*/ 3, rp_matrix_ptr, rp_matrix_size, input_datapoint_ptr, input_datapoint_size, output_hv_ptr, output_hv_size, /* Parameters: 0*/ /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size, "inner_rp_encoding_task");
+    void* task = __hetero_task_begin(/* Input Buffers: 2*/ 3, rp_matrix_ptr, rp_matrix_size, 
+    input_datapoint_ptr, input_datapoint_size, 
+    output_hv_ptr, output_hv_size, /* Parameters: 0*/ 
+    /* Output Buffers: 1*/ 1, output_hv_ptr, output_hv_size, "inner_rp_encoding_task");
 
     //__hetero_hint(DEVICE);
 #endif
@@ -407,7 +410,7 @@ void L2NormDFG(__hypervector__<N_CLASS, hvtype> *norms_buffer, size_t norms_size
             );
 #endif
 
-	*norms_buffer = __hetero_hdc_l2norm<N_CLASS, Dhv, hvtype>(*classes);
+	// *norms_buffer = __hetero_hdc_l2norm<N_CLASS, Dhv, hvtype>(*classes);
 #ifndef NODFG
     __hetero_task_end(task); 
     __hetero_section_end(section);
