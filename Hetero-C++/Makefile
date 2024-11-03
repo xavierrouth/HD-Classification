@@ -28,7 +28,7 @@ O1_FLAGS = -targetlibinfo -dce -tti -tbaa -scoped-noalias-aa -assumption-cache-t
 
 # Generate Executable
 host-sim: build/hdc.lowered.sim.ll $(ACCELERATOR_API_PATH)/hpvm_interface.cpp $(ACCELERATOR_API_PATH)/api_hdnn_reram.hpp
-	$(HPVM_INSTALL_DIR)/build/bin/clang++ -lm -g -lrt -O1 -march=native $< $(ACCELERATOR_API_PATH)/hpvm_interface.cpp   -o $@ 
+	$(HPVM_INSTALL_DIR)/build/bin/clang++ -lm -lrt -O1 -march=native $< $(ACCELERATOR_API_PATH)/hpvm_interface.cpp   -o $@ 
 
 # Clang Frontend to IR
 build/host.sim.ll: src/host.cpp

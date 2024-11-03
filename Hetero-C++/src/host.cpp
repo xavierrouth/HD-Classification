@@ -18,7 +18,7 @@
 
 using namespace std;
 
-#define MNIST
+// #define MNIST
 
 extern "C" void cu_rt_dump_float_hv(void *hv, size_t row, const char * filename);
 extern "C" void cu_rt_dump_float_hm(void *hv, size_t row, size_t col, const char * filename);
@@ -103,7 +103,6 @@ int main(int argc, char** argv) {
 	datasetRead(X_test, X_test_path);
 	datasetRead(y_test, y_test_path);
 
-	int* inference_test_labels = y_test.data();
 #endif
 
 
@@ -187,8 +186,10 @@ int main(int argc, char** argv) {
 	size_t training_labels_size = N_SAMPLE * sizeof(int);
 
 	// INFERENCE DATA / TEST DATA
-	int inference_labels[N_TEST];
+	//int inference_test_labels[N_TEST];
 	size_t inference_labels_size = N_TEST * sizeof(int);
+				int* inference_test_labels = y_test.data();
+
 
 	std::vector<hvtype> temp_vec2(X_test.begin(), X_test.end());
 	hvtype* inference_input_vectors_cpu = temp_vec2.data();
@@ -321,6 +322,7 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 	// ============ Training ===============
 
 	// Initialize class hvs.
+	// No need to do encoding if using simulator. 
 	if (0) {
 	__hetero_hdc_encoding_loop(0, (void*) InitialEncodingDFG<Dhv, N_FEAT>, N_SAMPLE, N_CLASS, N_FEAT, N_FEAT_PAD, rp_matrix_buffer, rp_matrix_size, (hvtype *) training_input_vectors, input_vector_size, encoded_hvs_handle, class_size);
 
