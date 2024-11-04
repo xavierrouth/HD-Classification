@@ -232,7 +232,6 @@ int main(int argc, char** argv) {
 	t_elapsed = std::chrono::high_resolution_clock::now() - t_start;
 	mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_elapsed).count();
 
-	std::cout << "Overall benchmark took " << mSec << " mSec" << std::endl;
 	std::cout << "Test Accuracy: " << test_accuracy << std::endl;
 
 #ifndef NODFG
@@ -346,6 +345,7 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 
 	// l2norm(__hetero_hdc_get_handle(norms_buffer), __hetero_hdc_get_handle(classes));
 	
+	std::cout << "Beginning Training." << std::endl;
 	__hetero_hdc_training_loop(22, (void*) training_root_node<Dhv, N_CLASS, N_SAMPLE, N_FEAT>, 
 		EPOCH, N_SAMPLE, N_FEAT, N_FEAT, 
 		rp_matrix_buffer, rp_matrix_size, 
@@ -356,6 +356,7 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 		__hetero_hdc_get_handle(scores_buffer), scores_size, 
 		__hetero_hdc_get_handle(norms_buffer), norms_size, 
 		__hetero_hdc_get_handle(update_hv), update_hv_size, &argmax[0], sizeof(int));
+	std::cout << "Finished Training." << std::endl;
 
 	auto t_end = std::chrono::high_resolution_clock::now();
 	long mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_end-t_start).count();
@@ -370,6 +371,7 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 	auto t_start = std::chrono::high_resolution_clock::now();
 
 	// l2norm(__hetero_hdc_get_handle(norms_buffer), __hetero_hdc_get_handle(classes));
+	std::cout << "Beginning Inference." << std::endl;
 	__hetero_hdc_inference_loop(17, 
 		(void*) inference_root_node<Dhv, N_CLASS, N_TEST, N_FEAT>, 
 		N_TEST, N_FEAT, N_FEAT, 
@@ -380,6 +382,7 @@ extern "C" float run_hd_classification(int EPOCH, __hypermatrix__<Dhv, N_FEAT, h
 		__hetero_hdc_get_handle(encoded_hv_buffer), encoded_hv_size, 
 		__hetero_hdc_get_handle(scores_buffer), scores_size, 
 		__hetero_hdc_get_handle(norms_buffer), norms_size);
+	std::cout << "Finished Inference." << std::endl;
 
 	auto t_end = std::chrono::high_resolution_clock::now();
 	long mSec = std::chrono::duration_cast<std::chrono::milliseconds>(t_end-t_start).count();
