@@ -31,7 +31,7 @@ O1_FLAGS = -targetlibinfo -dce -tti -tbaa -scoped-noalias-aa -assumption-cache-t
 
 # Generate Executable
 host-sim: build/hdc.lowered.sim.ll build/accel.o
-	echo "Link application with PCM simulator."
+	echo "Linking application with PCM simulator."
 	$(HPVM_INSTALL_DIR)/build/bin/clang++ -lm -lrt -O1 -march=native $^ -o $@ 
 
 build/accel.o: $(ACCELERATOR_API_PATH)/hpvm_interface.cpp $(ACCELERATOR_API_PATH)/api_hdnn_reram.hpp
@@ -39,7 +39,7 @@ build/accel.o: $(ACCELERATOR_API_PATH)/hpvm_interface.cpp $(ACCELERATOR_API_PATH
 
 # Clang Frontend to IR
 build/host.sim.ll: src/host.cpp
-	echo "Compile application HDC++ code to HPVM-HDC IR."
+	echo "Compiling application HDC++ code to HPVM-HDC IR."
 	$(HPVM_BIN)/clang++ -Xclang -disable-O0-optnone -DNODFG -DDEVICE=hpvm::CPU_TARGET $(CFLAGS) $(INCLUDES) -S -emit-llvm $^ -o $@ 
 # 
 
@@ -50,7 +50,7 @@ build/hpvm.genhdc.sim.ll: build/host.sim.ll
 
 # Lower HDC Intrinsics
 build/hdc.lowered.1.sim.ll: build/hpvm.genhdc.sim.ll #hpvm. # -enable-hcc 
-	echo "Lower HDC intrinsics to PCM device instructions."
+	echo "Lowering HDC intrinsics to PCM device instructions."
 	$(HPVM_BIN)/opt -enable-new-pm=0 -load $(HPVM_LIB)/LLVMHPVMHDC.so  -vector-block-dim=1 -mlc -mlc-bits=$(MLC) -write-verify-cycles=$(WRITE_VERIFY) -lower-hdc -compile-sim -globaldce -dce -simplifycfg $< -S -o $@ 
 
 # DCE
