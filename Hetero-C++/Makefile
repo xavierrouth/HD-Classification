@@ -12,7 +12,7 @@ CUDA_PATH:=/software/cuda-9.1
 OPENCL_PATH:=$(CUDA_PATH)
 OPENCL_LIB_PATH:=$(OPENCL_PATH/lib64)
 
-MLC ?= 1
+MLC ?= 5
 WRITE_VERIFY ?= 5
 
 CFLAGS := -fenable-matrix -fno-discard-value-names -fno-exceptions -pthread
