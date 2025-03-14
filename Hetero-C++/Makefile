@@ -12,8 +12,8 @@ CUDA_PATH:=/software/cuda-9.1
 OPENCL_PATH:=$(CUDA_PATH)
 OPENCL_LIB_PATH:=$(OPENCL_PATH/lib64)
 
-MLC ?= 5
-WRITE_VERIFY ?= 5
+MLC ?= 1
+WRITE_VERIFY ?= 1
 
 CFLAGS := -fenable-matrix -fno-discard-value-names -fno-exceptions -pthread
 
@@ -51,7 +51,7 @@ build/hpvm.genhdc.sim.ll: build/host.sim.ll
 # Lower HDC Intrinsics
 build/hdc.lowered.1.sim.ll: build/hpvm.genhdc.sim.ll #hpvm. # -enable-hcc 
 	echo "Lowering HDC intrinsics to PCM device instructions."
-	$(HPVM_BIN)/opt -enable-new-pm=0 -load $(HPVM_LIB)/LLVMHPVMHDC.so  -vector-block-dim=1 -mlc -mlc-bits=$(MLC) -write-verify-cycles=$(WRITE_VERIFY) -lower-hdc -compile-sim -globaldce -dce -simplifycfg $< -S -o $@ 
+	$(HPVM_BIN)/opt -enable-new-pm=0 -load $(HPVM_LIB)/LLVMHPVMHDC.so  -vector-block-dim=1 -mlc -mlc-bits=$(MLC) -write-verify-cycles=$(WRITE_VERIFY) -adc-step=1 -adc-floor=-63 -adc-ceil=64 -lower-hdc -compile-sim -globaldce -dce -simplifycfg $< -S -o $@ 
 
 # DCE
 build/hdc.lowered.sim.ll: build/hdc.lowered.1.sim.ll #hpvm. # -enable-hcc
